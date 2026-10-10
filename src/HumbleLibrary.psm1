@@ -74,4 +74,14 @@ function Get-DownloadPlan {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan
+# Checks a downloaded file against the size and MD5 Humble gives for it.
+function Test-DownloadedFile {
+    [CmdletBinding()]
+    param([string]$Path, [long]$Bytes, [string]$Md5)
+    if ((Get-Item -LiteralPath $Path).Length -ne $Bytes) { return 'mismatch' }  # cut off, or an error page
+    if (-not $Md5) { return 'size-only' }  # Humble gave no MD5 for this file
+    if ((Get-FileHash -LiteralPath $Path -Algorithm MD5).Hash -ne $Md5) { return 'mismatch' }
+    return 'ok'
+}
+
+Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile
