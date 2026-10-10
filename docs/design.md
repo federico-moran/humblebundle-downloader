@@ -52,6 +52,7 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 | `size-only` | Humble gave no MD5; the size matches |
 | `humble-md5-wrong` | Humble's MD5 is wrong for what it serves; two downloads were identical and complete. `bytes` and `file_md5` are the file's own |
 | `format-only` | Accepted from the first run's leftovers (2026-10-10): complete, but not compared with a second download. `bytes` and `file_md5` are the file's own |
+| `encrypted-7z` | Repacked by hand into a password-protected `.7z`, because antivirus blocks the original (the *Malware Analyst's Cookbook* DVD, 2026-10-10; a README next to it explains). `md5` is still Humble's, so runs skip it; `bytes` and `file_md5` are the `.7z`'s |
 | `mismatch` | With `status = failed`: no good copy yet |
 
 `md5` is always Humble's, since that is how the plan recognises a file it has already downloaded.

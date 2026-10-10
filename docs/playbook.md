@@ -2,7 +2,9 @@
 
 A checklist for each run. For what the tool does, see the [README](../README.md).
 
-> **Where I left off (2026-10-10):** the first full run is done: **1,226 files (about 44 GB), all passing `-VerifyOnly`**. Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). Two still fail: `malwareanalyst_dvd.zip` (917 MB, didn't finish; run again to retry) and *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>` (broken; it will fail every run). Next: run again for the DVD, then step 6 against the old `Humble Bundle eBooks` folder.
+> **Where I left off (2026-10-10):** the library is complete apart from one broken link: **1,227 files (about 44 GB), all passing `-VerifyOnly`**. Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). The *Malware Analyst's Cookbook* DVD, which Defender blocks, was downloaded by hand and is stored as `malwareanalyst_dvd.7z` (password `infected`), with `malwareanalyst_dvd.README.md` beside it; open it only in an isolated VM. Still failing: *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>`. Next: step 6 against the old `Humble Bundle eBooks` folder.
+
+> **If antivirus blocks a download:** download it by hand with protection briefly off, pack it with `7z a -t7z -mx=0 -mhe=on -pinfected <name>.7z <file>`, delete the original, turn protection back on, and record it in `manifest.csv` with Humble's `md5`, the `.7z`'s `bytes` and `file_md5`, and `check = encrypted-7z`.
 
 ## 1. Get your session cookie
 
