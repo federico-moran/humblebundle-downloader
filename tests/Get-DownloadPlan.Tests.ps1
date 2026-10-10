@@ -99,4 +99,66 @@ Describe 'Get-DownloadPlan' {
         $plan.Count | Should -Be 1
         $plan[0].Bundles | Should -Be @('Python Bundle', 'Coding Bundle')
     }
+
+    It 'keeps both files when two different books share a file name, adding part of the MD5 to the second' {
+        $orders = @(
+            New-Order 'Bundle A' @(New-Subproduct 'Guide to X' @(New-File 'PDF' 'guide.pdf' '3f2a9c11')) 'KEY1'
+            New-Order 'Bundle B' @(New-Subproduct 'Guide to Y' @(New-File 'PDF' 'guide.pdf' '7b8e0d22')) 'KEY2')
+
+        (Get-DownloadPlan -Orders $orders).File | Should -Be @('guide.pdf', 'guide.7b8e0d.pdf')
+    }
+
+    Context 'with a manifest of earlier downloads' {
+        It 'skips a file already downloaded with the same MD5' {
+            $order = New-Order 'Bundle' @(New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'm1'))
+            $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'm1'; status = 'present' })
+
+            $plan = @(Get-DownloadPlan -Orders $order -Manifest $manifest)
+
+            $plan.Action | Should -Be @('skip')
+        }
+
+        It 'reports a new version of a downloaded book as an update, and plans it only with -Update' {
+            $order = New-Order 'Bundle' @(New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'new5678'))
+            $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'old1234'; item = 'book'; format = 'pdf'; status = 'present' })
+
+            $report = @(Get-DownloadPlan -Orders $order -Manifest $manifest)
+            $update = @(Get-DownloadPlan -Orders $order -Manifest $manifest -Update)
+
+            $report.Action | Should -Be @('update-available')
+            $report.File | Should -Be @('book.pdf')
+            $update.Action | Should -Be @('update')
+        }
+
+        It 'still adds an MD5 suffix when a different book uses a downloaded file''s name' {
+            $order = New-Order 'Bundle' @(New-Subproduct 'Other Book' @(New-File 'PDF' 'book.pdf' 'new5678'))
+            $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'old1234'; item = 'book'; format = 'pdf'; status = 'present' })
+
+            $plan = @(Get-DownloadPlan -Orders $order -Manifest $manifest | Where-Object Action -eq 'download')
+
+            $plan.File | Should -Be @('book.new567.pdf')
+        }
+
+        It 'marks a downloaded file that Humble no longer offers as removed' {
+            $order = New-Order 'Bundle' @(New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'm1'))
+            $manifest = @(
+                [pscustomobject]@{ file = 'book.pdf'; md5 = 'm1'; item = 'book'; format = 'pdf'; status = 'present' }
+                [pscustomobject]@{ file = 'gone.pdf'; md5 = 'm9'; item = 'gone'; format = 'pdf'; status = 'present' })
+
+            $plan = @(Get-DownloadPlan -Orders $order -Manifest $manifest)
+
+            ($plan | Where-Object File -eq 'gone.pdf').Action | Should -Be 'removed'
+        }
+
+        It 'does not mark a file removed when this run''s -Format leaves it out' {
+            $order = New-Order 'Bundle' @(New-Subproduct 'Book' @(
+                New-File 'PDF' 'book.pdf' 'm1'
+                New-File 'MOBI' 'book.mobi' 'm2'))
+            $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'm1'; item = 'book'; format = 'pdf'; status = 'present' })
+
+            $plan = @(Get-DownloadPlan -Orders $order -Manifest $manifest -Format mobi)
+
+            $plan.File | Should -Be @('book.mobi')
+        }
+    }
 }
