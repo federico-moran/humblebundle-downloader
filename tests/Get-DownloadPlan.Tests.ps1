@@ -70,4 +70,33 @@ Describe 'Get-DownloadPlan' {
         $plan.File | Should -Be @('book_code.zip', 'book_dvd.zip')
         $plan.Format | Should -Be @('supplement', 'supplement')
     }
+
+    It 'plans only ebooks by default, and other platforms when asked for with -Platform' {
+        $order = New-Order 'Bundle' @(
+            New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'm1')
+            New-Subproduct 'Audiobook' @(New-File 'MP3' 'audiobook.zip' 'm2') -Platform audio)
+
+        (Get-DownloadPlan -Orders $order -Format pdf, mp3).File | Should -Be @('book.pdf')
+        (Get-DownloadPlan -Orders $order -Platform audio -Format mp3).File | Should -Be @('audiobook.zip')
+    }
+
+    It 'leaves out files that have no download link (external links only)' {
+        $external = [pscustomobject]@{ name = 'PDF'; external_link = 'https://publisher.example.test/claim' }
+        $order = New-Order 'Bundle' @(
+            New-Subproduct 'Hosted elsewhere' @($external)
+            New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'm1'))
+
+        (Get-DownloadPlan -Orders $order).File | Should -Be @('book.pdf')
+    }
+
+    It 'plans a book bought in two bundles once, recording both bundles' {
+        $orders = @(
+            New-Order 'Python Bundle' @(New-Subproduct 'Python Crash Course' @(New-File 'PDF' 'pcc.pdf' 'same')) 'KEY1'
+            New-Order 'Coding Bundle' @(New-Subproduct 'Python Crash Course' @(New-File 'PDF' 'pcc.pdf' 'same')) 'KEY2')
+
+        $plan = @(Get-DownloadPlan -Orders $orders)
+
+        $plan.Count | Should -Be 1
+        $plan[0].Bundles | Should -Be @('Python Bundle', 'Coding Bundle')
+    }
 }
