@@ -84,6 +84,38 @@ function Test-DownloadedFile {
     return 'ok'
 }
 
+# What a downloaded file really is, judged by its content: 'pdf', 'epub' or 'zip' when it is complete,
+# otherwise nothing. Humble sometimes serves an EPUB under a .pdf link.
+function Get-BookFileType {
+    [CmdletBinding()]
+    param([string]$Path)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    try {
+        # A zip's index is at its end, so a cut-off zip can't be opened.
+        $zip = [IO.Compression.ZipFile]::OpenRead($Path)
+        try {
+            $first = $zip.Entries | Select-Object -First 1
+            if ($first.FullName -eq 'mimetype') {
+                $r = New-Object IO.StreamReader($first.Open())
+                try { if ($r.ReadToEnd().Trim() -eq 'application/epub+zip') { return 'epub' } } finally { $r.Dispose() }
+            }
+            return 'zip'
+        } finally { $zip.Dispose() }
+    } catch [IO.InvalidDataException] { }  # not a zip, or a cut-off one
+    $s = [IO.File]::OpenRead($Path)
+    try {
+        $head = New-Object byte[] 5
+        $null = $s.Read($head, 0, 5)
+        if ([Text.Encoding]::ASCII.GetString($head) -eq '%PDF-') {
+            $n = [int][Math]::Min(2048, $s.Length)
+            $null = $s.Seek(-$n, 'End')
+            $tail = New-Object byte[] $n
+            $null = $s.Read($tail, 0, $n)
+            if ([Text.Encoding]::ASCII.GetString($tail).Contains('%%EOF')) { return 'pdf' }  # no end marker: cut off
+        }
+    } finally { $s.Dispose() }
+}
+
 # Checks the folder against the manifest without contacting Humble (-VerifyOnly), e.g. for a backup copy.
 function Test-Library {
     [CmdletBinding()]
@@ -91,7 +123,8 @@ function Test-Library {
     foreach ($row in $Manifest | Where-Object status -eq 'present') {
         $path = Join-Path $Folder $row.file
         $status = if (-not (Test-Path -LiteralPath $path)) { 'missing' }
-            elseif ((Test-DownloadedFile -Path $path -Bytes $row.bytes -Md5 $row.md5) -eq 'mismatch') { 'changed' }
+            # file_md5: the file's own MD5, recorded when Humble's MD5 for it turned out wrong
+            elseif ((Test-DownloadedFile -Path $path -Bytes $row.bytes -Md5 $(if ($row.file_md5) { $row.file_md5 } else { $row.md5 })) -eq 'mismatch') { 'changed' }
             else { 'ok' }
         [pscustomobject]@{ File = $row.file; Status = $status }
     }
@@ -109,7 +142,10 @@ function Compare-Library {
     $key = { param($s) ([string]$s).ToLowerInvariant() -replace '^the\W+', '' -replace '[^\p{L}\p{N}]', '' }
     $byMd5 = @{}
     $present = @($Manifest | Where-Object status -eq 'present')
-    foreach ($row in $present) { $byMd5[$row.md5.ToLowerInvariant()] = $row }
+    foreach ($row in $present) {
+        $byMd5[$row.md5.ToLowerInvariant()] = $row
+        if ($row.file_md5) { $byMd5[$row.file_md5.ToLowerInvariant()] = $row }  # the file's own, when Humble's was wrong
+    }
     $root = (Resolve-Path -LiteralPath $Folder).Path.TrimEnd('\') + '\'
     # A folder with its own manifest (the PacktPub library names files by ISBN) gives the titles.
     $titles = @{}
@@ -134,4 +170,4 @@ function Compare-Library {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Test-Library, Compare-Library
+Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Compare-Library

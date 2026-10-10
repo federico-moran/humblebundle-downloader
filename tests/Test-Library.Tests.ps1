@@ -23,4 +23,14 @@ Describe 'Test-Library' {
         ($result | Where-Object File -eq 'next.epub.part').Status | Should -Be 'unfinished'
         $result.Count | Should -Be 4
     }
+
+    It 'checks a file accepted despite a wrong Humble MD5 against its own size and MD5' {
+        $folder = Join-Path $TestDrive 'accepted'
+        $null = New-Item -ItemType Directory -Path $folder
+        [IO.File]::WriteAllText((Join-Path $folder 'book.pdf'), 'hello')
+        $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; file_md5 = $helloMd5
+            bytes = '5'; check = 'humble-md5-wrong'; status = 'present' })
+
+        (Test-Library -Folder $folder -Manifest $manifest).Status | Should -Be 'ok'
+    }
 }
