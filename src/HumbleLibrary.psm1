@@ -27,7 +27,7 @@ function Get-DownloadPlan {
             foreach ($dl in $sub.downloads) {
                 foreach ($f in $dl.download_struct) {
                     $fmt = $f.name.ToLowerInvariant()
-                    if ($fmt -in 'supplement', 'download') { $fmt = 'supplement' }  # zips of code, disc contents, extras
+                    if ($fmt -in 'supplement', 'download', 'zip', '.zip') { $fmt = 'supplement' }  # zips of code, videos, disc contents
                     # Everything Humble offers, whatever this run downloads, so nothing is wrongly marked removed.
                     if ($f.md5) { $offered[$f.md5.ToLowerInvariant()] = $true }
                     $offered["$($sub.machine_name)|$fmt"] = $true

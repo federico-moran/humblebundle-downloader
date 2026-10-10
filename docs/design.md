@@ -25,7 +25,7 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 | Language | PowerShell 7 | Matches the PacktPub tools; nothing to install |
 | Cookie | Pasted once, saved with DPAPI under `%LOCALAPPDATA%`; asked again on 401; `-ResetSession` | Rarely re-pasted, never in the repo |
 | Scope | `-Platform`, default `ebook`; keys ignored; Vault and Choice out of scope | The goal is the ebook library; Vault downloads use a different, unconfirmed system |
-| Formats | `-Format`, default PDF, EPUB, CBZ and supplements | Supplements are often the only copy of code or disc contents. "PDF (HD)" is its own format, `pdf (hd)`, not downloaded by default |
+| Formats | `-Format`, default PDF, EPUB, CBZ and supplements | Supplements are often the only copy of code or disc contents; Humble labels them "Supplement", "Download", "ZIP" or ".zip" (all seen in a real library, 2026-10-10). "PDF (HD)" is its own format, `pdf (hd)`, not downloaded by default |
 | Folder | `OneDrive\Documents\HumbleBundle`, flat, Humble's file names | A book in two bundles is stored once; Calibre-friendly. Bundles are recorded in the manifest |
 | Name clashes | Second file gets the first 6 characters of its MD5 | Nothing lost, no prompts |
 | Default action | Downloads; `-WhatIf` previews; `humble-library.json` saved every run | PowerShell convention |

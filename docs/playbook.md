@@ -2,7 +2,7 @@
 
 A checklist for each run. For what the tool does, see the [README](../README.md).
 
-> **Where I left off (2026-10-10):** the script and its tests are written; it has only been run against a fake Humble. Next: steps 1–3 below for real (`-WhatIf`, then one file), then the full run, then step 6 against the old `Humble Bundle eBooks` folder.
+> **Where I left off (2026-10-10):** the first real run is under way: 45 orders, 1,206 files (34.6 GB), and the first files all passed the MD5 check. That run started before files labelled `ZIP`/`.zip` counted as supplements, so the **next run adds 22 companion ZIPs (about 8.3 GB)**, including the *Malware Analyst's Cookbook* DVD. One link (*How to Survive Anything*, "Download") is literally named `<FILE_NAME>` on Humble's side: check how it ends up. Then step 5, and step 6 against the old `Humble Bundle eBooks` folder.
 
 ## 1. Get your session cookie
 

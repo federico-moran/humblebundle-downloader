@@ -71,6 +71,14 @@ Describe 'Get-DownloadPlan' {
         $plan.Format | Should -Be @('supplement', 'supplement')
     }
 
+    It 'treats files labelled ZIP or .zip as supplements too (companion code, videos, disc contents)' {
+        $order = New-Order 'Bundle' @(
+            New-Subproduct 'Book' @(New-File 'ZIP' 'book_companion.zip' 'm1')
+            New-Subproduct 'Book DVD' @(New-File '.zip' 'book_dvd.zip' 'm2'))
+
+        (Get-DownloadPlan -Orders $order).Format | Should -Be @('supplement', 'supplement')
+    }
+
     It 'plans only ebooks by default, and other platforms when asked for with -Platform' {
         $order = New-Order 'Bundle' @(
             New-Subproduct 'Book' @(New-File 'PDF' 'book.pdf' 'm1')
