@@ -84,4 +84,54 @@ function Test-DownloadedFile {
     return 'ok'
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile
+# Checks the folder against the manifest without contacting Humble (-VerifyOnly), e.g. for a backup copy.
+function Test-Library {
+    [CmdletBinding()]
+    param([string]$Folder, [object[]]$Manifest)
+    foreach ($row in $Manifest | Where-Object status -eq 'present') {
+        $path = Join-Path $Folder $row.file
+        $status = if (-not (Test-Path -LiteralPath $path)) { 'missing' }
+            elseif ((Test-DownloadedFile -Path $path -Bytes $row.bytes -Md5 $row.md5) -eq 'mismatch') { 'changed' }
+            else { 'ok' }
+        [pscustomobject]@{ File = $row.file; Status = $status }
+    }
+    foreach ($part in Get-ChildItem -LiteralPath $Folder -Filter '*.part' -File) {
+        [pscustomobject]@{ File = $part.Name; Status = 'unfinished' }
+    }
+}
+
+# Compares another folder (an old download folder, the PacktPub library) with this library (-CompareWith).
+# Each file there is reported with the file here it matches. Subfolders are included.
+function Compare-Library {
+    [CmdletBinding()]
+    param([object[]]$Manifest, [string]$Folder)
+    # Titles and file names compared as letters and digits only, without a leading "The".
+    $key = { param($s) ([string]$s).ToLowerInvariant() -replace '^the\W+', '' -replace '[^\p{L}\p{N}]', '' }
+    $byMd5 = @{}
+    $present = @($Manifest | Where-Object status -eq 'present')
+    foreach ($row in $present) { $byMd5[$row.md5.ToLowerInvariant()] = $row }
+    $root = (Resolve-Path -LiteralPath $Folder).Path.TrimEnd('\') + '\'
+    # A folder with its own manifest (the PacktPub library names files by ISBN) gives the titles.
+    $titles = @{}
+    $otherManifest = Join-Path $Folder 'manifest.csv'
+    if (Test-Path -LiteralPath $otherManifest) {
+        foreach ($r in Import-Csv -LiteralPath $otherManifest) { if ($r.file -and $r.title) { $titles[$r.file] = $r.title } }
+    }
+    $books = Get-ChildItem -LiteralPath $Folder -File -Recurse | Where-Object Extension -notin '.csv', '.json', '.txt'
+    foreach ($f in $books) {
+        $match = $byMd5[(Get-FileHash -LiteralPath $f.FullName -Algorithm MD5).Hash.ToLowerInvariant()]
+        $status = 'identical'
+        if (-not $match) {
+            # Similar when one name contains the other, ignoring short names that would match too much.
+            $name = & $key $(if ($titles[$f.Name]) { $titles[$f.Name] } else { $f.BaseName })
+            $match = $present | Where-Object {
+                $t = & $key $_.title
+                [Math]::Min($t.Length, $name.Length) -ge 10 -and ($t.Contains($name) -or $name.Contains($t))
+            } | Select-Object -First 1
+            $status = if ($match) { 'similar-title' } else { 'only-there' }
+        }
+        [pscustomobject]@{ Other = $f.FullName.Substring($root.Length); Status = $status; Ours = $match.file }
+    }
+}
+
+Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Test-Library, Compare-Library
