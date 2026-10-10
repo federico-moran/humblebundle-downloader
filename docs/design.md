@@ -36,7 +36,7 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 | Removed | Kept, marked `removed` (never from this run's filters alone) | Humble may withdraw products |
 | Expiring links | Each order is read again once its links are 30 minutes old, or after a 403/410 | The links' lifetime isn't documented |
 | Tools | One script: `-VerifyOnly` (offline check) and `-CompareWith <folder>` (old folder, PacktPub library) | One thing to remember |
-| Calibre | Not in v1 | Cleanup rules only became clear on real data with PacktPub |
+| Calibre | Added after v1 (2026-10-10): `Update-Calibre.ps1` adds EPUBs only, tagged `Humble Bundle` and with each bundle's name; matched by MD5; `calibredb add --duplicates` | EPUBs suit the Kindle; Calibre's own duplicate check goes by title, which different books share (O'Reilly's and Packt's *Bash Cookbook*) |
 | Repo | Private at first; public later, then a license | |
 
 ## Code layout

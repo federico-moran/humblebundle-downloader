@@ -2,7 +2,9 @@
 
 A checklist for each run. For what the tool does, see the [README](../README.md).
 
-> **Where I left off (2026-10-10):** done. **1,227 files (about 44 GB), all passing `-VerifyOnly`.** Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). The *Malware Analyst's Cookbook* DVD, which Defender blocks, is stored as `malwareanalyst_dvd.7z` (password `infected`), with `malwareanalyst_dvd.README.md` beside it; open it only in an isolated VM. The old `Humble Bundle eBooks` folder was compared (step 6) and deleted: 158 of its 161 files were covered, and the other 3 PDFs (two books Humble now offers only as EPUB, plus a 1st edition) are in `extras\`, with a README. Still failing: *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>`. Possible next steps: Calibre and the Kindle; `-CompareWith` against the PacktPub library.
+> **Where I left off (2026-10-10):** done. **1,227 files (about 44 GB), all passing `-VerifyOnly`.** Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). The *Malware Analyst's Cookbook* DVD, which Defender blocks, is stored as `malwareanalyst_dvd.7z` (password `infected`), with `malwareanalyst_dvd.README.md` beside it; open it only in an isolated VM. The old `Humble Bundle eBooks` folder was compared (step 6) and deleted: 158 of its 161 files were covered, and the other 3 PDFs (two books Humble now offers only as EPUB, plus a 1st edition) are in `extras\`, with a README. Still failing: *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>`. Possible next steps: the Kindle.
+>
+> **Update (2026-10-10):** compared with the PacktPub library: **no book is in both.** `-CompareWith` reported 91 "similar-title" matches, all wrong (short titles such as No Starch's *Penetration Testing* are contained in many Packt titles); checked instead by the ISBNs inside the EPUBs and by exact titles. The 21 Humble books from "Packt" are Excel and Power BI titles that aren't in the Packt account. **All 585 EPUBs are in Calibre** (`D:\Calibre`, now 1,132 books with the Packt ones), added by [step 7](#7-calibre), tagged `Humble Bundle` and with their bundles.
 
 > **If antivirus blocks a download:** download it by hand with protection briefly off, pack it with `7z a -t7z -mx=0 -mhe=on -pinfected <name>.7z <file>`, delete the original, turn protection back on, and record it in `manifest.csv` with Humble's `md5`, the `.7z`'s `bytes` and `file_md5`, and `check = encrypted-7z`.
 
@@ -64,6 +66,20 @@ To see which books you also have from PacktPub:
 .\Get-HumbleLibrary.ps1 -CompareWith "$env:USERPROFILE\OneDrive\Documents\PacktPub"
 ```
 
+**similar-title** matches against the PacktPub library are unreliable: check them by hand.
+
+## 7. Calibre
+
+Close Calibre, then in a PowerShell 7 terminal:
+
+```powershell
+.\Update-Calibre.ps1 -WhatIf      # what would be added
+.\Update-Calibre.ps1 -MaxBooks 1  # first time: add one book and check it in Calibre
+.\Update-Calibre.ps1
+```
+
+It ends with `Now N of N EPUBs are in Calibre with their tags`. While it runs, calibredb may print a `MaintainPageCounts ... TimeoutExpired` traceback or `qt.gui` warnings about cover images: they're harmless (a page-count worker slow to stop; damaged colour profiles or JPEG data in a few covers).
+
 ## Next time (new purchases)
 
-Run step 4 again. Only new files are downloaded; add `-Update` to take new versions of books you have.
+Run step 4 again. Only new files are downloaded; add `-Update` to take new versions of books you have. Then run step 7 to add the new EPUBs to Calibre.

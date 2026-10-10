@@ -42,12 +42,21 @@ A PowerShell 7 script using your own logged-in session. It's a sibling of [packt
 
 For the full run checklist, see the [playbook](docs/playbook.md).
 
+### Calibre
+
+```powershell
+.\Update-Calibre.ps1 -WhatIf  # preview
+.\Update-Calibre.ps1          # add the EPUBs to Calibre
+```
+
+Adds every EPUB in the library that isn't in Calibre yet, tagged `Humble Bundle` and with the name of each bundle it came in (commas dropped, since Calibre separates tags with them). Books are recognised by their EPUB's MD5, so a re-run adds only new books, and gives books already there any tags they lack. PDFs and supplements are left out. Close Calibre first; the script backs up its database before changing anything. `-MaxBooks 1` adds one book, for a first test.
+
 ## Development
 
 ```powershell
 Invoke-Pester ./tests
 ```
 
-The logic is in [`src/HumbleLibrary.psm1`](src/HumbleLibrary.psm1) and tested with Pester 5+ using made-up order data; [`Get-HumbleLibrary.ps1`](Get-HumbleLibrary.ps1) handles the session, the network and the output.
+The logic is in [`src/HumbleLibrary.psm1`](src/HumbleLibrary.psm1) and tested with Pester 5+ using made-up order data; [`Get-HumbleLibrary.ps1`](Get-HumbleLibrary.ps1) handles the session, the network and the output, and [`Update-Calibre.ps1`](Update-Calibre.ps1) the calls to `calibredb`.
 
 Only use this for things you've bought, at the gentle default pace: Humble's terms forbid automated access faster than a person could manage.

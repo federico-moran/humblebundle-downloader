@@ -170,4 +170,41 @@ function Compare-Library {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Compare-Library
+# A bundle's name as a Calibre tag. Calibre separates tags with commas, so commas in the name are dropped.
+function ConvertTo-CalibreTag {
+    [CmdletBinding()]
+    param([string]$Bundle)
+    ($Bundle -replace ',', '' -replace '\s+', ' ').Trim()
+}
+
+# What to do in Calibre for each EPUB in the library: 'add' it (tagged with its source and bundles), 'tag' a book
+# already there that lacks some of its bundle tags, or 'skip' it. Calibre books are recognised by the MD5
+# of their EPUB, since Calibre stores the file unchanged.
+function Get-CalibrePlan {
+    [CmdletBinding()]
+    param(
+        [object[]]$Manifest,
+        [hashtable]$InCalibre = @{},  # MD5 of an EPUB in Calibre -> @{ id; tags }
+        [string]$SourceTag = 'Humble Bundle'  # where the book came from, added to every book's tags
+    )
+    foreach ($row in $Manifest | Where-Object { $_.status -eq 'present' -and $_.format -eq 'epub' }) {
+        $tags = @(@($SourceTag) + @($row.bundles -split '; ' | ForEach-Object { ConvertTo-CalibreTag $_ }) | Where-Object { $_ })
+        # file_md5: the file's own, when Humble's MD5 for it was wrong
+        $md5 = $(if ($row.file_md5) { $row.file_md5 } else { $row.md5 }).ToLowerInvariant()
+        $book = $InCalibre[$md5]
+        $item = [pscustomobject]@{ Action = 'add'; File = $row.file; Title = $row.title; Tags = $tags; Id = $null }
+        if ($book) {
+            $item.Id = $book.id
+            $missing = @($tags | Where-Object { @($book.tags) -notcontains $_ })
+            if ($missing) {
+                $item.Action = 'tag'
+                $item.Tags = @(@($book.tags) + $missing | Where-Object { $_ })  # keeps the tags already there
+            } else {
+                $item.Action = 'skip'
+            }
+        }
+        $item
+    }
+}
+
+Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
