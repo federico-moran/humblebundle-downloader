@@ -2,7 +2,7 @@
 
 A checklist for each run. For what the tool does, see the [README](../README.md).
 
-> **Where I left off (2026-10-10):** the first real run is under way: 45 orders, 1,206 files (34.6 GB), and the first files all passed the MD5 check. That run started before files labelled `ZIP`/`.zip` counted as supplements, so the **next run adds 22 companion ZIPs (about 8.3 GB)**, including the *Malware Analyst's Cookbook* DVD. One link (*How to Survive Anything*, "Download") is literally named `<FILE_NAME>` on Humble's side: check how it ends up. Then step 5, and step 6 against the old `Humble Bundle eBooks` folder.
+> **Where I left off (2026-10-10):** the first full run is done: **1,226 files (about 44 GB), all passing `-VerifyOnly`**. Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). Two still fail: `malwareanalyst_dvd.zip` (917 MB, didn't finish; run again to retry) and *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>` (broken; it will fail every run). Next: run again for the DVD, then step 6 against the old `Humble Bundle eBooks` folder.
 
 ## 1. Get your session cookie
 

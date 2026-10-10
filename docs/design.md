@@ -30,7 +30,8 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 | Name clashes | Second file gets the first 6 characters of its MD5 | Nothing lost, no prompts |
 | Default action | Downloads; `-WhatIf` previews; `humble-library.json` saved every run | PowerShell convention |
 | Pace | One file at a time, 5 s apart, 1 s between order reads, 3 retries with growing waits | Humble's terms forbid going faster than a person could |
-| Checking | Download to `.part` (resumable), check size and MD5, then rename; one re-download on mismatch, then `failed` | A file under its real name is always a verified copy |
+| Checking | Download to `.part` (resumable), check size and MD5, then rename. On a mismatch, two fresh downloads: if they are identical and a complete PDF, EPUB or zip, keep it (`check = humble-md5-wrong`, its own MD5 in `file_md5`); otherwise `failed` | A file under its real name is always a verified copy. Changed 2026-10-10: Humble's size and MD5 turned out wrong for 149 of 1,228 files (about 1 in 8), mostly No Starch, Pragmatic, O'Reilly, Make: and Wiley books, all complete files |
+| Real file type | Saved with the extension of what the file is | Humble serves some Make: EPUBs under `.pdf` links |
 | Updates | New MD5 for the same item and format: reported; downloaded with `-Update`, old copy kept with a date | Re-runs never change files already on devices |
 | Removed | Kept, marked `removed` (never from this run's filters alone) | Humble may withdraw products |
 | Expiring links | Each order is read again once its links are 30 minutes old, or after a 403/410 | The links' lifetime isn't documented |
@@ -42,6 +43,18 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 
 - [`src/HumbleLibrary.psm1`](../src/HumbleLibrary.psm1): the logic, with no network calls. Tested at four seams: `Get-DownloadPlan`, `Test-DownloadedFile`, `Test-Library`, `Compare-Library`.
 - [`Get-HumbleLibrary.ps1`](../Get-HumbleLibrary.ps1): session, HTTP, downloading, writing the manifest, output. Not unit tested; checked by a real `-WhatIf` and a one-file run.
+
+## The manifest's check column
+
+| `check` | Meaning |
+| --- | --- |
+| `ok` | Matches Humble's size and MD5 |
+| `size-only` | Humble gave no MD5; the size matches |
+| `humble-md5-wrong` | Humble's MD5 is wrong for what it serves; two downloads were identical and complete. `bytes` and `file_md5` are the file's own |
+| `format-only` | Accepted from the first run's leftovers (2026-10-10): complete, but not compared with a second download. `bytes` and `file_md5` are the file's own |
+| `mismatch` | With `status = failed`: no good copy yet |
+
+`md5` is always Humble's, since that is how the plan recognises a file it has already downloaded.
 
 ## Open questions
 

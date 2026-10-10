@@ -50,7 +50,9 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'src\HumbleLibrary.psm1') -Force
 
 $manifestPath = Join-Path $Folder 'manifest.csv'
-$columns = 'file', 'title', 'format', 'bundles', 'item', 'bytes', 'md5', 'check', 'status', 'added', 'modified'
+# md5 is Humble's, which identifies the file in its orders. When Humble's turns out wrong for the file it
+# serves, file_md5 and bytes record what is really on disk (check = humble-md5-wrong).
+$columns = 'file', 'title', 'format', 'bundles', 'item', 'bytes', 'md5', 'file_md5', 'check', 'status', 'added', 'modified'
 $manifest = @(if (Test-Path -LiteralPath $manifestPath) { Import-Csv -LiteralPath $manifestPath })
 
 function Write-Table($Rows, [string[]]$Property) {
@@ -170,12 +172,13 @@ function Save-Manifest {
     if ($WhatIfPreference) { return }
     $rows.Values | Select-Object $columns | Export-Csv -LiteralPath $manifestPath -NoTypeInformation -Encoding utf8BOM -WhatIf:$false
 }
-function Set-Row($Item, [string]$Status, [string]$Check) {
-    $path = Join-Path $Folder $Item.File
+function Set-Row($Item, [string]$Status, [string]$Check, [string]$File = $Item.File, [long]$Bytes = $Item.Bytes, [string]$FileMd5 = '') {
+    $path = Join-Path $Folder $File
     $old = $rows[$Item.File]
-    $rows[$Item.File] = [pscustomobject]@{
-        file = $Item.File; title = $Item.Title; format = $Item.Format; bundles = ($Item.Bundles -join '; '); item = $Item.Item
-        bytes = $Item.Bytes; md5 = $Item.Md5; check = $Check; status = $Status
+    if ($File -ne $Item.File -and $old) { $rows.Remove($Item.File) }  # saved under another name (its real type)
+    $rows[$File] = [pscustomobject]@{
+        file = $File; title = $Item.Title; format = $Item.Format; bundles = ($Item.Bundles -join '; '); item = $Item.Item
+        bytes = $Bytes; md5 = $Item.Md5; file_md5 = $FileMd5; check = $Check; status = $Status
         added = $(if ($old.added) { $old.added } else { (Get-Date).ToString('s') })
         modified = $(if (Test-Path -LiteralPath $path) { (Get-Item -LiteralPath $path).LastWriteTimeUtc.ToString('s') + 'Z' })
     }
@@ -189,9 +192,10 @@ Save-Manifest
 # ---- Download ---------------------------------------------------------------------------------------
 # Downloads to the .part file, resuming what is there. Network errors are retried with growing waits;
 # an expired link is signed again by reading its order again.
-function Receive-File($Item, [string]$Part) {
+# -Fresh: the caller deleted the .part, so a retry after a network error resumes only this download.
+function Receive-File($Item, [string]$Part, [switch]$Fresh) {
     for ($attempt = 1; ; $attempt++) {
-        if ((Test-Path -LiteralPath $Part) -and (Get-Item -LiteralPath $Part).Length -ge $Item.Bytes) { return }
+        if (-not $Fresh -and (Test-Path -LiteralPath $Part) -and (Get-Item -LiteralPath $Part).Length -ge $Item.Bytes) { return }
         try {
             $null = Invoke-WebRequest -Uri (Get-FreshUrl $Item) -OutFile $Part -Resume
             return
@@ -207,29 +211,50 @@ function Receive-File($Item, [string]$Part) {
 
 $failed = New-Object Collections.Generic.List[object]
 $sizeOnly = New-Object Collections.Generic.List[object]
+$md5Wrong = New-Object Collections.Generic.List[object]
 for ($n = 0; $n -lt $todo.Count; $n++) {
     $p = $todo[$n]
     if (-not $PSCmdlet.ShouldProcess(('{0} ({1:N1} MB, {2})' -f $p.File, ($p.Bytes / 1MB), $p.Title), $p.Action)) { continue }
     Write-Host ('({0}/{1}) {2}  {3:N1} MB' -f ($n + 1), $todo.Count, $p.File, ($p.Bytes / 1MB))
     $part = Join-Path $Folder "$($p.File).part"
-    $check = ''
+    $check = ''; $fileMd5 = ''; $file = $p.File
     try {
-        for ($try = 1; $try -le 2 -and $check -notin 'ok', 'size-only'; $try++) {
-            if ($try -eq 2) {
-                Write-Warning '  The file did not match Humble''s size and MD5; downloading it again.'
+        Receive-File $p $part  # resumes a .part left by an earlier run
+        $check = Test-DownloadedFile -Path $part -Bytes $p.Bytes -Md5 $p.Md5
+        if ($check -eq 'mismatch') {
+            # Humble's size and MD5 are wrong for about 1 file in 8. Two fresh downloads that are identical and
+            # complete show what the server really sends; two different ones mean a bad download.
+            Write-Warning '  The file did not match Humble''s size and MD5; downloading it twice more to compare.'
+            $hashes = foreach ($i in 1, 2) {
                 Remove-Item -LiteralPath $part -ErrorAction SilentlyContinue
+                Receive-File $p $part -Fresh
+                if ((Test-DownloadedFile -Path $part -Bytes $p.Bytes -Md5 $p.Md5) -eq 'ok') { 'humble'; break }
+                (Get-FileHash -LiteralPath $part -Algorithm MD5).Hash.ToLowerInvariant()
             }
-            Receive-File $p $part
-            $check = Test-DownloadedFile -Path $part -Bytes $p.Bytes -Md5 $p.Md5
+            $type = Get-BookFileType -Path $part
+            if ($hashes -contains 'humble') { $check = 'ok' }
+            elseif ($hashes.Count -eq 2 -and $hashes[0] -eq $hashes[1] -and $type) {
+                $check = 'humble-md5-wrong'; $fileMd5 = $hashes[1]
+                # Saved with the extension of what it really is (Humble serves some EPUBs under .pdf links).
+                $ext = [IO.Path]::GetExtension($p.File).TrimStart('.').ToLowerInvariant()
+                if ($type -in 'pdf', 'epub' -and $ext -in 'pdf', 'epub' -and $type -ne $ext) {
+                    $file = [IO.Path]::ChangeExtension($p.File, $type)
+                    if ($rows[$file] -or (Test-Path -LiteralPath (Join-Path $Folder $file))) {
+                        $file = [IO.Path]::ChangeExtension($p.File, "$($fileMd5.Substring(0, 6)).$type")
+                    }
+                    Write-Warning "  Humble serves this as .$ext but it is an $($type.ToUpper()): saved as $file"
+                }
+            } elseif (-not $type) { Write-Warning '  The downloads are incomplete or damaged.' }
+            else { Write-Warning '  The two downloads differ.' }
         }
     } catch {
         Write-Warning "  $($_.Exception.Message)"
     }
-    if ($check -notin 'ok', 'size-only') {
+    if ($check -notin 'ok', 'size-only', 'humble-md5-wrong') {
         $failed.Add($p)
         if (-not $rows[$p.File] -or $rows[$p.File].status -ne 'present') { Set-Row $p 'failed' 'mismatch' }
     } else {
-        $target = Join-Path $Folder $p.File
+        $target = Join-Path $Folder $file
         if ($p.Action -eq 'update' -and (Test-Path -LiteralPath $target)) {
             # Keep the old version, named with today's date.
             $kept = '{0}.{1}{2}' -f [IO.Path]::GetFileNameWithoutExtension($p.File), (Get-Date -Format 'yyyy-MM-dd'), [IO.Path]::GetExtension($p.File)
@@ -237,8 +262,10 @@ for ($n = 0; $n -lt $todo.Count; $n++) {
             $old = $rows[$p.File]; $old.file = $kept; $rows.Remove($p.File); $rows[$kept] = $old
         }
         Move-Item -LiteralPath $part -Destination $target -Force
-        Set-Row $p 'present' $check
+        if ($fileMd5) { Set-Row $p 'present' $check -File $file -Bytes (Get-Item -LiteralPath $target).Length -FileMd5 $fileMd5 }
+        else { Set-Row $p 'present' $check }
         if ($check -eq 'size-only') { $sizeOnly.Add($p) }
+        if ($check -eq 'humble-md5-wrong') { $md5Wrong.Add($p) }
     }
     Save-Manifest
     if ($n -lt $todo.Count - 1) { Start-Sleep -Seconds $DelaySeconds }
@@ -251,5 +278,6 @@ $removed = @($plan | Where-Object Action -eq 'removed')
 if ($updates) { Write-Host "$($updates.Count) books have a new version on Humble (run with -Update to download them):"; Write-Table $updates File, Title }
 if ($removed) { Write-Host "$($removed.Count) files are no longer offered by Humble (kept, marked removed):"; Write-Table $removed File }
 if ($sizeOnly) { Write-Host "$($sizeOnly.Count) files were checked by size only (Humble gives no MD5 for them):"; Write-Table $sizeOnly File, Title }
+if ($md5Wrong) { Write-Host "$($md5Wrong.Count) files differ from Humble's MD5 but came down identical twice and complete (kept; humble-md5-wrong):"; Write-Table $md5Wrong File, Title }
 if ($failed) { Write-Warning "$($failed.Count) files failed (recorded as failed; the next run retries them):"; Write-Table $failed File, Title }
 if (-not $WhatIfPreference) { Write-Host "Done: $($todo.Count - $failed.Count) of $($todo.Count) downloaded and checked. Manifest: $manifestPath" }
