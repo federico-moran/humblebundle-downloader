@@ -4,6 +4,8 @@ A checklist for each run. For what the tool does, see the [README](../README.md)
 
 > **Where I left off (2026-10-10):** done. **1,227 files (about 44 GB), all passing `-VerifyOnly`.** Humble's MD5 was wrong for 149 of them (complete files, kept as `format-only`; the script now handles this itself). The *Malware Analyst's Cookbook* DVD, which Defender blocks, is stored as `malwareanalyst_dvd.7z` (password `infected`), with `malwareanalyst_dvd.README.md` beside it; open it only in an isolated VM. The old `Humble Bundle eBooks` folder was compared (step 6) and deleted: 158 of its 161 files were covered, and the other 3 PDFs (two books Humble now offers only as EPUB, plus a 1st edition) are in `extras\`, with a README. Still failing: *How to Survive Anything*'s supplement, whose link on Humble's side is literally `<FILE_NAME>`. Possible next steps: the Kindle.
 >
+> **Update (2026-10-11):** `-CompareWith` now matches by MD5, then by ISBN (read from the EPUBs on both sides), then by exact title, reported as `same-title` to check by hand. The "one title contains the other" rule behind the 91 wrong matches below is gone.
+>
 > **Update (2026-10-10):** compared with the PacktPub library: **no book is in both.** `-CompareWith` reported 91 "similar-title" matches, all wrong (short titles such as No Starch's *Penetration Testing* are contained in many Packt titles); checked instead by the ISBNs inside the EPUBs and by exact titles. The 21 Humble books from "Packt" are Excel and Power BI titles that aren't in the Packt account. **All 585 EPUBs are in Calibre** (`D:\Calibre`, now 1,132 books with the Packt ones), added by [step 7](#7-calibre), tagged `Humble Bundle` and with their bundles.
 
 > **If antivirus blocks a download:** download it by hand with protection briefly off, pack it with `7z a -t7z -mx=0 -mhe=on -pinfected <name>.7z <file>`, delete the original, turn protection back on, and record it in `manifest.csv` with Humble's `md5`, the `.7z`'s `bytes` and `file_md5`, and `check = encrypted-7z`.
@@ -58,7 +60,7 @@ Re-checks every file against the manifest without contacting Humble. Use it on b
 .\Get-HumbleLibrary.ps1 -CompareWith "$env:USERPROFILE\OneDrive\Documents\Humble Bundle eBooks"
 ```
 
-OneDrive downloads the old files first if they're online-only. Anything listed as **only-there** isn't in the new library: look at those before deleting the old folder. **similar-title** files are probably the same book in a different printing.
+OneDrive downloads the old files first if they're online-only. Anything listed as **only-there** isn't in the new library: look at those before deleting the old folder. **same-isbn** files are the same book (a different printing or edition file), matched by an ISBN inside the EPUBs, in a manifest, or in the file name. **same-title** files have exactly the same title: check them by hand, since different books can share a title (O'Reilly's and Packt's *Bash Cookbook*). Titles that only partly match aren't reported, so a reworded title shows as only-there.
 
 To see which books you also have from PacktPub:
 
@@ -66,7 +68,7 @@ To see which books you also have from PacktPub:
 .\Get-HumbleLibrary.ps1 -CompareWith "$env:USERPROFILE\OneDrive\Documents\PacktPub"
 ```
 
-**similar-title** matches against the PacktPub library are unreliable: check them by hand.
+The PacktPub library names its files by ISBN, so its books match by ISBN wherever our EPUB has one.
 
 ## 7. Calibre
 

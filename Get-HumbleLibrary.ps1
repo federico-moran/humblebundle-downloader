@@ -70,11 +70,12 @@ if ($VerifyOnly) {
 }
 if ($CompareWith) {
     if (-not $manifest) { throw "No manifest.csv in $Folder." }
-    $result = @(Compare-Library -Manifest $manifest -Folder $CompareWith)
+    $result = @(Compare-Library -Manifest $manifest -Library $Folder -Folder $CompareWith)
     Write-Host ('{0} files in {1}: {2}' -f $result.Count, $CompareWith, (($result | Group-Object Status | ForEach-Object { "$($_.Count) $($_.Name)" }) -join ', '))
-    foreach ($s in 'only-there', 'similar-title', 'identical') {
+    foreach ($s in 'only-there', 'same-title', 'same-isbn', 'identical') {
         $rows = @($result | Where-Object Status -eq $s)
-        if ($rows) { Write-Host "`n$s"; Write-Table $rows Other, Ours }
+        $note = if ($s -eq 'same-title') { ' (check by hand: different books can share a title)' }
+        if ($rows) { Write-Host "`n$s$note"; Write-Table $rows Other, Ours }
     }
     return
 }

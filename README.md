@@ -37,7 +37,7 @@ A PowerShell 7 script using your own logged-in session. It's a sibling of [packt
 | `-MaxDownloads` | all | Stop after this many files |
 | `-DelaySeconds` | 5 | Pause between downloads |
 | `-VerifyOnly` | | Check the folder against `manifest.csv`, offline |
-| `-CompareWith <folder>` | | List which files in another folder are also here (same MD5 or similar title), and which are only there |
+| `-CompareWith <folder>` | | List which files in another folder are also here (same MD5, same ISBN, or exactly the same title), and which are only there |
 | `-ResetSession` | | Forget the saved cookie |
 
 For the full run checklist, see the [playbook](docs/playbook.md).
