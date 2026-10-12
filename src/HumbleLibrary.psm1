@@ -133,38 +133,104 @@ function Test-Library {
     }
 }
 
+# A string as an ISBN-13 (an ISBN-10 is converted), or nothing when it isn't a valid ISBN.
+function ConvertTo-Isbn13([string]$Text) {
+    $s = ($Text -replace '^\s*(urn:)?(isbn)?\W*', '' -replace '[\s-]', '').ToUpperInvariant()
+    if ($s -match '^\d{9}[\dX]$') {
+        $sum = 0
+        for ($i = 0; $i -lt 10; $i++) { $sum += (10 - $i) * $(if ($s[$i] -eq 'X') { 10 } else { [int][string]$s[$i] }) }
+        if ($sum % 11) { return }
+        $s = '978' + $s.Substring(0, 9)
+    } elseif ($s -notmatch '^97[89]\d{10}$') { return }
+    $sum = 0
+    for ($i = 0; $i -lt 12; $i++) { $sum += [int][string]$s[$i] * (1 + 2 * ($i % 2)) }
+    $check = (10 - $sum % 10) % 10
+    if ($s.Length -eq 13 -and [int][string]$s[12] -ne $check) { return }
+    $s.Substring(0, 12) + $check
+}
+
+# The ISBNs an EPUB gives for itself (the identifiers in its package file), as ISBN-13s.
+# Often both the print and the ebook ISBN.
+function Get-EpubIsbn {
+    [CmdletBinding()]
+    param([string]$Path)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    try { $zip = [IO.Compression.ZipFile]::OpenRead($Path) } catch { return }  # missing, not a zip, or cut off
+    try {
+        $read = { param($entry) $r = New-Object IO.StreamReader($entry.Open()); try { $r.ReadToEnd() } finally { $r.Dispose() } }
+        $opf = $null
+        $container = $zip.GetEntry('META-INF/container.xml')
+        if ($container -and (& $read $container) -match 'full-path="([^"]+)"') { $opf = $zip.GetEntry($Matches[1]) }
+        if (-not $opf) { $opf = $zip.Entries | Where-Object FullName -like '*.opf' | Select-Object -First 1 }
+        if (-not $opf) { return }
+        [regex]::Matches((& $read $opf), '<(?:dc:)?identifier[^>]*>([^<]+)<') |
+            ForEach-Object { ConvertTo-Isbn13 $_.Groups[1].Value } | Select-Object -Unique
+    } finally { $zip.Dispose() }
+}
+
 # Compares another folder (an old download folder, the PacktPub library) with this library (-CompareWith).
-# Each file there is reported with the file here it matches. Subfolders are included.
+# Each file there is reported with the file here it matches: 'identical' (same MD5), 'same-isbn' (an ISBN in
+# common), 'same-title' (exactly the same title, to check by hand: different books can share a title), or
+# 'only-there'. Subfolders are included.
 function Compare-Library {
     [CmdletBinding()]
-    param([object[]]$Manifest, [string]$Folder)
+    param(
+        [object[]]$Manifest,
+        [string]$Library,  # this library's folder, to read the ISBNs in its EPUBs
+        [string]$Folder
+    )
     # Titles and file names compared as letters and digits only, without a leading "The".
     $key = { param($s) ([string]$s).ToLowerInvariant() -replace '^the\W+', '' -replace '[^\p{L}\p{N}]', '' }
     $byMd5 = @{}
-    $present = @($Manifest | Where-Object status -eq 'present')
-    foreach ($row in $present) {
+    $byItem = @{}   # item -> its files here (a book's PDF and EPUB share an item)
+    $byIsbn = @{}   # ISBN -> item, from the item's EPUB
+    $byTitle = @{}  # normalised title -> item
+    foreach ($row in $Manifest | Where-Object status -eq 'present') {
         $byMd5[$row.md5.ToLowerInvariant()] = $row
         if ($row.file_md5) { $byMd5[$row.file_md5.ToLowerInvariant()] = $row }  # the file's own, when Humble's was wrong
+        $item = if ($row.item) { $row.item } else { $row.file }
+        $byItem[$item] = @($byItem[$item]) + $row | Where-Object { $_ }
+        $title = & $key $row.title
+        if ($title -and -not $byTitle.Contains($title)) { $byTitle[$title] = $item }
+        if ($row.format -eq 'epub') {
+            foreach ($isbn in Get-EpubIsbn -Path (Join-Path $Library $row.file)) { $byIsbn[$isbn] = $item }
+        }
     }
     $root = (Resolve-Path -LiteralPath $Folder).Path.TrimEnd('\') + '\'
-    # A folder with its own manifest (the PacktPub library names files by ISBN) gives the titles.
+    # A folder with its own manifest (the PacktPub library names files by ISBN) gives titles and ISBNs.
     $titles = @{}
+    $isbns = @{}
     $otherManifest = Join-Path $Folder 'manifest.csv'
     if (Test-Path -LiteralPath $otherManifest) {
-        foreach ($r in Import-Csv -LiteralPath $otherManifest) { if ($r.file -and $r.title) { $titles[$r.file] = $r.title } }
+        foreach ($r in Import-Csv -LiteralPath $otherManifest) {
+            if ($r.file -and $r.title) { $titles[$r.file] = $r.title }
+            if ($r.file -and $r.isbn) { $isbns[$r.file] = $r.isbn }
+        }
     }
-    $books = Get-ChildItem -LiteralPath $Folder -File -Recurse | Where-Object Extension -notin '.csv', '.json', '.txt'
+    $books = @(Get-ChildItem -LiteralPath $Folder -File -Recurse | Where-Object Extension -notin '.csv', '.json', '.txt')
+    # An EPUB's ISBNs also count for the files beside it with the same name (its PDF, say).
+    $epubIsbns = @{}
+    foreach ($f in $books | Where-Object Extension -eq '.epub') {
+        $epubIsbns[(Join-Path $f.DirectoryName $f.BaseName)] = @(Get-EpubIsbn -Path $f.FullName)
+    }
     foreach ($f in $books) {
         $match = $byMd5[(Get-FileHash -LiteralPath $f.FullName -Algorithm MD5).Hash.ToLowerInvariant()]
         $status = 'identical'
         if (-not $match) {
-            # Similar when one name contains the other, ignoring short names that would match too much.
-            $name = & $key $(if ($titles[$f.Name]) { $titles[$f.Name] } else { $f.BaseName })
-            $match = $present | Where-Object {
-                $t = & $key $_.title
-                [Math]::Min($t.Length, $name.Length) -ge 10 -and ($t.Contains($name) -or $name.Contains($t))
-            } | Select-Object -First 1
-            $status = if ($match) { 'similar-title' } else { 'only-there' }
+            $found = @($epubIsbns[(Join-Path $f.DirectoryName $f.BaseName)]) + (ConvertTo-Isbn13 $isbns[$f.Name]) + (ConvertTo-Isbn13 $f.BaseName) |
+                Where-Object { $_ -and $byIsbn[$_] } | Select-Object -First 1
+            $item = $byIsbn["$found"]
+            $status = 'same-isbn'
+            if (-not $item) {
+                $item = $byTitle[(& $key $(if ($titles[$f.Name]) { $titles[$f.Name] } else { $f.BaseName }))]
+                $status = if ($item) { 'same-title' } else { 'only-there' }
+            }
+            if ($item) {
+                # Our copy in the same format, if we have one.
+                $mine = @($byItem[$item])
+                $match = $mine | Where-Object { [IO.Path]::GetExtension($_.file) -eq $f.Extension } | Select-Object -First 1
+                if (-not $match) { $match = $mine[0] }
+            }
         }
         [pscustomobject]@{ Other = $f.FullName.Substring($root.Length); Status = $status; Ours = $match.file }
     }
@@ -207,4 +273,4 @@ function Get-CalibrePlan {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan

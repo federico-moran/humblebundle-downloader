@@ -41,7 +41,7 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 
 ## Code layout
 
-- [`src/HumbleLibrary.psm1`](../src/HumbleLibrary.psm1): the logic, with no network calls. Tested at four seams: `Get-DownloadPlan`, `Test-DownloadedFile`, `Test-Library`, `Compare-Library`.
+- [`src/HumbleLibrary.psm1`](../src/HumbleLibrary.psm1): the logic, with no network calls. Tested at four seams: `Get-DownloadPlan`, `Test-DownloadedFile`, `Test-Library`, `Compare-Library` (and `Get-EpubIsbn`, which it uses).
 - [`Get-HumbleLibrary.ps1`](../Get-HumbleLibrary.ps1): session, HTTP, downloading, writing the manifest, output. Not unit tested; checked by a real `-WhatIf` and a one-file run.
 
 ## The manifest's check column
