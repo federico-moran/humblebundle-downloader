@@ -1,5 +1,7 @@
 # Humble Bundle Downloader
 
+> Built by a non-developer, fully agentically, after taking Matt Pocock's course: [see how](#how-this-was-built).
+
 Downloads the ebooks (and, if you ask, other files) you own on [Humble Bundle](https://www.humblebundle.com/home/library), checking every file against the size and MD5 that Humble publishes for it.
 
 A PowerShell 7 script using your own logged-in session. It's a sibling of [packtpub-downloader](https://github.com/federico-moran/packtpub-downloader), which had to run inside the browser because PacktPub blocks scripts; Humble doesn't (as of 2026), so this one runs on its own. See [docs/design.md](docs/design.md) for why, and for the fallback if that changes.
@@ -60,3 +62,19 @@ Invoke-Pester ./tests
 The logic is in [`src/HumbleLibrary.psm1`](src/HumbleLibrary.psm1) and tested with Pester 5+ using made-up order data; [`Get-HumbleLibrary.ps1`](Get-HumbleLibrary.ps1) handles the session, the network and the output, and [`Update-Calibre.ps1`](Update-Calibre.ps1) the calls to `calibredb`.
 
 Only use this for things you've bought, at the gentle default pace: Humble's terms forbid automated access faster than a person could manage.
+
+## How this was built
+
+I'm not a developer. This year I took Matt Pocock's [AI Coding for Real Engineers](https://www.aihero.dev/cohorts/ai-coding-for-real-engineers-m0k0w) course, and this tool and its two siblings were my first projects afterwards. They were built fully agentically: Claude Code wrote all the code and the docs. My part was choosing the problems, finding out how each store's site works, making the decisions (each design doc records them and why), and testing everything against my own libraries. I followed the course's process, with Matt's [skills](https://github.com/mattpocock/skills) installed in Claude Code.
+
+I built the three between 2026-09-27 and 2026-10-11. Together they've downloaded and checked about 2,550 files, and the Humble and Manning tools have 105 automated tests between them.
+
+This was the second, and the first built as a standalone script with tests. Humble publishes a size and MD5 for every file, so each download is checked as it arrives. That's how we found that Humble's own MD5 was wrong for 149 of 1,228 files, all of them complete. The design changed to match: when a file doesn't match, it's downloaded twice more, and kept if the two copies are identical and complete. 1,227 files came down, all passing.
+
+The siblings: [packtpub-downloader](https://github.com/federico-moran/packtpub-downloader), my favourite, and [manning-downloader](https://github.com/federico-moran/manning-downloader).
+
+A personal project: issues are welcome, but fixes aren't promised. Not affiliated with or endorsed by Matt Pocock, AI Hero, PacktPub, Humble Bundle or Manning.
+
+## License
+
+[MIT](LICENSE)
