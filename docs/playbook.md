@@ -82,7 +82,7 @@ Close Calibre, then in a PowerShell 7 terminal:
 .\Update-Calibre.ps1
 ```
 
-It ends with `Now N of N EPUBs are in Calibre with their tags`. While it runs, calibredb may print a `MaintainPageCounts ... TimeoutExpired` traceback or `qt.gui` warnings about cover images: they're harmless (a page-count worker slow to stop; damaged colour profiles or JPEG data in a few covers).
+It ends with `Now N of N EPUBs are in Calibre with their tags`. While it runs, calibredb may print a `MaintainPageCounts ... TimeoutExpired` traceback or `qt.gui` warnings about cover images: they're harmless (a page-count worker slow to stop; damaged color profiles or JPEG data in a few covers).
 
 ## Next time (new purchases)
 

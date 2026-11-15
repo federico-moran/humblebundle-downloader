@@ -55,7 +55,7 @@ If Humble starts challenging scripts (the API answers 403 with a check page), th
 | `encrypted-7z` | Repacked by hand into a password-protected `.7z`, because antivirus blocks the original (the *Malware Analyst's Cookbook* DVD, 2026-10-10; a README next to it explains). `md5` is still Humble's, so runs skip it; `bytes` and `file_md5` are the `.7z`'s |
 | `mismatch` | With `status = failed`: no good copy yet |
 
-`md5` is always Humble's, since that is how the plan recognises a file it has already downloaded.
+`md5` is always Humble's, since that is how the plan recognizes a file it has already downloaded.
 
 ## Open questions
 

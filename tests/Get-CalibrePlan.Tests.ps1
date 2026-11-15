@@ -48,7 +48,7 @@ Describe 'Get-CalibrePlan' {
         $plan.Tags | Should -Be @('My own tag', 'Humble Bundle', 'B')
     }
 
-    It 'recognises a file by its own MD5 when Humble''s was wrong' {
+    It 'recognizes a file by its own MD5 when Humble''s was wrong' {
         $in = @{ 'fff' = @{ id = 3; tags = @('Humble Bundle', 'B') } }
 
         (Get-CalibrePlan -Manifest @(New-Row 'a.epub' 'AAA' 'B' -FileMd5 'FFF') -InCalibre $in).Action | Should -Be 'skip'

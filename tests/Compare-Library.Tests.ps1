@@ -42,7 +42,7 @@ Describe 'Compare-Library' {
         $result[0].Ours | Should -Be 'shellcoder.pdf'
     }
 
-    It 'recognises an identical file by its own MD5 when Humble''s MD5 for it was wrong' {
+    It 'recognizes an identical file by its own MD5 when Humble''s MD5 for it was wrong' {
         [IO.File]::WriteAllText((Join-Path $other 'old_copy.pdf'), 'hello')
         $manifest = @([pscustomobject]@{ file = 'book.pdf'; md5 = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; file_md5 = $helloMd5
             title = 'Book'; status = 'present' })
