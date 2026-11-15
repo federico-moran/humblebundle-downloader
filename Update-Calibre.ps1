@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Reads manifest.csv in the library folder and adds every EPUB that isn't in Calibre yet. A book is
-    recognised by its EPUB's MD5, so a second run adds nothing, and books added by hand are found too.
+    recognized by its EPUB's MD5, so a second run adds nothing, and books added by hand are found too.
     Books already in Calibre get any bundle or source tags they lack; their other tags are kept.
     PDFs and supplements are left out.
 

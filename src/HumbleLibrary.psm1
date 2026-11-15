@@ -12,7 +12,7 @@ function Get-DownloadPlan {
         [switch]$Update             # download new versions of books already downloaded
     )
     $have = @{}    # md5 -> manifest row of a file already downloaded
-    $byItem = @{}  # "item|format" -> the same, to recognise a new version of a book
+    $byItem = @{}  # "item|format" -> the same, to recognize a new version of a book
     foreach ($row in $Manifest) {
         if ($row.status -ne 'present' -or -not $row.md5) { continue }
         $have[$row.md5.ToLowerInvariant()] = $row
@@ -184,7 +184,7 @@ function Compare-Library {
     $byMd5 = @{}
     $byItem = @{}   # item -> its files here (a book's PDF and EPUB share an item)
     $byIsbn = @{}   # ISBN -> item, from the item's EPUB
-    $byTitle = @{}  # normalised title -> item
+    $byTitle = @{}  # normalized title -> item
     foreach ($row in $Manifest | Where-Object status -eq 'present') {
         $byMd5[$row.md5.ToLowerInvariant()] = $row
         if ($row.file_md5) { $byMd5[$row.file_md5.ToLowerInvariant()] = $row }  # the file's own, when Humble's was wrong
@@ -244,7 +244,7 @@ function ConvertTo-CalibreTag {
 }
 
 # What to do in Calibre for each EPUB in the library: 'add' it (tagged with its source and bundles), 'tag' a book
-# already there that lacks some of its bundle tags, or 'skip' it. Calibre books are recognised by the MD5
+# already there that lacks some of its bundle tags, or 'skip' it. Calibre books are recognized by the MD5
 # of their EPUB, since Calibre stores the file unchanged.
 function Get-CalibrePlan {
     [CmdletBinding()]

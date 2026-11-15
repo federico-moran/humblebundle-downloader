@@ -51,7 +51,7 @@ For the full run checklist, see the [playbook](docs/playbook.md).
 .\Update-Calibre.ps1          # add the EPUBs to Calibre
 ```
 
-Adds every EPUB in the library that isn't in Calibre yet, tagged `Humble Bundle` and with the name of each bundle it came in (commas dropped, since Calibre separates tags with them). Books are recognised by their EPUB's MD5, so a re-run adds only new books, and gives books already there any tags they lack. PDFs and supplements are left out. Close Calibre first; the script backs up its database before changing anything. `-MaxBooks 1` adds one book, for a first test.
+Adds every EPUB in the library that isn't in Calibre yet, tagged `Humble Bundle` and with the name of each bundle it came in (commas dropped, since Calibre separates tags with them). Books are recognized by their EPUB's MD5, so a re-run adds only new books, and gives books already there any tags they lack. PDFs and supplements are left out. Close Calibre first; the script backs up its database before changing anything. `-MaxBooks 1` adds one book, for a first test.
 
 ## Development
 
@@ -71,7 +71,7 @@ I built the three between 2026-09-27 and 2026-10-11. Together they've downloaded
 
 This was the second, and the first built as a standalone script with tests. Humble publishes a size and MD5 for every file, so each download is checked as it arrives. That's how we found that Humble's own MD5 was wrong for 149 of 1,228 files, all of them complete. The design changed to match: when a file doesn't match, it's downloaded twice more, and kept if the two copies are identical and complete. 1,227 files came down, all passing.
 
-The siblings: [packtpub-downloader](https://github.com/federico-moran/packtpub-downloader), my favourite, and [manning-downloader](https://github.com/federico-moran/manning-downloader).
+The siblings: [packtpub-downloader](https://github.com/federico-moran/packtpub-downloader), my favorite, and [manning-downloader](https://github.com/federico-moran/manning-downloader).
 
 A personal project: issues are welcome, but fixes aren't promised. Not affiliated with or endorsed by Matt Pocock, AI Hero, PacktPub, Humble Bundle or Manning.
 
