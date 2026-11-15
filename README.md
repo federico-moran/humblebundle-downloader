@@ -1,5 +1,7 @@
 # Humble Bundle Downloader
 
+[![Tests](https://github.com/federico-moran/humblebundle-downloader/actions/workflows/tests.yml/badge.svg)](https://github.com/federico-moran/humblebundle-downloader/actions/workflows/tests.yml)
+
 > Built by a non-developer, fully agentically, after taking Matt Pocock's course: [see how](#how-this-was-built).
 
 Downloads the ebooks (and, if you ask, other files) you own on [Humble Bundle](https://www.humblebundle.com/home/library), checking every file against the size and MD5 that Humble publishes for it.
