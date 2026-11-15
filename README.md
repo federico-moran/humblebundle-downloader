@@ -17,7 +17,7 @@ A PowerShell 7 script using your own logged-in session. It's a sibling of [packt
 
 ## Setup
 
-1. PowerShell 7 (`pwsh`).
+1. Windows, with PowerShell 7 (`pwsh`).
 2. Your session cookie. Log in at humblebundle.com, press **F12** → **Application** → **Cookies** → `https://www.humblebundle.com`, and copy the value of `_simpleauth_sess`. The script asks for it the first time (it isn't shown as you paste) and saves it encrypted for your Windows account in `%LOCALAPPDATA%\humblebundle-downloader`. When it expires, you're asked again.
 
 **The cookie is your login.** Never paste it anywhere else, and don't commit it. The library folder holds your order keys, which open your download pages: keep it private too.
@@ -32,7 +32,7 @@ A PowerShell 7 script using your own logged-in session. It's a sibling of [packt
 
 | Option | Default | |
 | --- | --- | --- |
-| `-Folder` | `OneDrive\Documents\HumbleBundle` | Where the files, `manifest.csv` and `humble-library.json` go |
+| `-Folder` | `OneDrive\Documents\HumbleBundle` | Where the files, `manifest.csv` and `humble-library.json` go; created if it doesn't exist |
 | `-Platform` | `ebook` | Also `audio`, `video`, `windows`, `mac`, `linux`, `android`, ... |
 | `-Format` | `pdf, epub, cbz, supplement` | Also `mobi`, `pdf (hd)`, `mp3`, ...; `supplement` is code and extras zips |
 | `-Update` | off | Download new versions of books you already have |
@@ -67,9 +67,9 @@ Only use this for things you've bought, at the gentle default pace: Humble's ter
 
 I'm not a developer. In June 2026 I took Matt Pocock's two-week [AI Coding for Real Engineers](https://www.aihero.dev/cohorts/ai-coding-for-real-engineers-m0k0w) course, and this tool and its two siblings were my first projects afterwards. They were built fully agentically: Claude Code wrote all the code and the docs. My part was choosing the problems, finding out how each store's site works, making the decisions (each design doc records them and why), and testing everything against my own libraries. I followed the course's process, with Matt's [skills](https://github.com/mattpocock/skills) installed in Claude Code.
 
-I built the three between 2026-09-27 and 2026-10-11. Together they've downloaded and checked about 2,550 files, and the Humble and Manning tools have 105 automated tests between them.
+I built the three between 2026-09-27 and 2026-10-12. Together they've downloaded and checked about 2,550 files, and the three have 127 automated tests between them (the Packt tool's were added in November 2026, before publishing).
 
-This was the second, and the first built as a standalone script with tests. Humble publishes a size and MD5 for every file, so each download is checked as it arrives. That's how we found that Humble's own MD5 was wrong for 149 of 1,228 files, all of them complete. The design changed to match: when a file doesn't match, it's downloaded twice more, and kept if the two copies are identical and complete. 1,227 files came down, all passing.
+This was the second, and the first built as a standalone script with tests. Humble publishes a size and MD5 for every file, so each download is checked as it arrives. That's how we found that Humble's own MD5 was wrong for 149 of 1,228 files, all of them complete. The design changed to match: when a file doesn't match, it's downloaded twice more, and kept if the two copies are identical and complete. 1,227 files came down, all passing. The pull request that merged the first working version is kept in [docs/v1-pull-request.md](docs/v1-pull-request.md).
 
 The siblings: [packtpub-downloader](https://github.com/federico-moran/packtpub-downloader), my favorite, and [manning-downloader](https://github.com/federico-moran/manning-downloader).
 
