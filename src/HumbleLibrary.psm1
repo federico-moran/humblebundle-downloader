@@ -368,6 +368,58 @@ function ConvertFrom-SignedUrlReply {
     [pscustomobject]@{ Urls = $urls; ExpiresAt = $expires }
 }
 
+# Books with a file not yet downloaded that Humble stops offering within $Days days, or already stopped
+# (Humble's unavailableAfter, a year after purchase): one row per book, soonest first.
+function Get-DownloadDeadline {
+    [CmdletBinding()]
+    param(
+        [object[]]$Plan,
+        [object[]]$Manifest = @(),  # manifest.csv as it is now, including this run's downloads
+        [datetime]$Now = [datetime]::UtcNow,
+        [int]$Days = 60
+    )
+    $present = @{}
+    foreach ($row in $Manifest) { if ($row.status -eq 'present') { $present[$row.file] = $true } }
+    $Plan | Where-Object { $_.AvailableUntil -and $_.Action -notin 'skip', 'removed' -and -not $present[$_.File] } |
+        Group-Object Item | ForEach-Object {
+            $p = $_.Group[0]
+            $until = [datetime]::Parse($p.AvailableUntil, [cultureinfo]::InvariantCulture, 'AdjustToUniversal')
+            $left = [int][Math]::Truncate(($until - $Now.ToUniversalTime()).TotalDays)
+            if ($left -le $Days) {
+                [pscustomobject]@{ Item = $p.Item; Title = $p.Title; AvailableUntil = $p.AvailableUntil; DaysLeft = $left }
+            }
+        } | Sort-Object AvailableUntil
+}
+
+# Which of the plan's removals to record in the manifest. More than $Limit, or every downloaded file of a
+# bundle, looks like Humble still migrating old orders rather than withdrawing books: then none is recorded
+# (all are HeldBack), unless -AcceptRemovals.
+function Get-RemovalDecision {
+    [CmdletBinding()]
+    param(
+        [object[]]$Plan,
+        [object[]]$Manifest,
+        [switch]$AcceptRemovals,
+        [int]$Limit = 10
+    )
+    $removed = @($Plan | Where-Object Action -eq 'removed')
+    $gone = @{}
+    foreach ($r in $removed) { $gone[$r.File] = $true }
+    $wholeBundle = $false
+    if ($removed.Count -and $removed.Count -le $Limit) {
+        $files = @{}  # bundle -> its downloaded files
+        foreach ($row in $Manifest | Where-Object status -eq 'present') {
+            foreach ($b in "$($row.bundles)" -split '; ' | Where-Object { $_ }) { $files[$b] = @($files[$b]) + $row.file | Where-Object { $_ } }
+        }
+        $wholeBundle = [bool]($files.Values | Where-Object { @($_ | Where-Object { -not $gone[$_] }).Count -eq 0 })
+    }
+    if ($AcceptRemovals -or ($removed.Count -le $Limit -and -not $wholeBundle)) {
+        [pscustomobject]@{ Record = $removed; HeldBack = @() }
+    } else {
+        [pscustomobject]@{ Record = @(); HeldBack = $removed }
+    }
+}
+
 # A date from a payload as an ISO 8601 UTC string. PowerShell 7 reads ISO strings in JSON as dates.
 function ConvertTo-IsoDate($Value) {
     if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
@@ -423,4 +475,4 @@ function ConvertFrom-PurchasePage {
     }
 }
 
-Export-ModuleMember -Function Find-ServerActionId, ConvertFrom-SignedUrlReply, Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+Export-ModuleMember -Function Get-DownloadDeadline, Get-RemovalDecision, Find-ServerActionId, ConvertFrom-SignedUrlReply, Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
