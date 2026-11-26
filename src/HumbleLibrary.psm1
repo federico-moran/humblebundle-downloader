@@ -32,10 +32,12 @@ function Get-DownloadPlan {
                     if ($f.md5) { $offered[$f.md5.ToLowerInvariant()] = $true }
                     $offered["$($sub.machine_name)|$fmt"] = $true
                     if ($dl.platform -notin $Platform -or $fmt -notin $Format -or -not $f.url.web) { continue }  # no link: hosted elsewhere
-                    $file = [IO.Path]::GetFileName(([uri]$f.url.web).AbsolutePath)
+                    $link = [uri]::new($f.url.web, [UriKind]::RelativeOrAbsolute)  # since 2026-11, a bare file name
+                    $file = [IO.Path]::GetFileName($(if ($link.IsAbsoluteUri) { $link.AbsolutePath } else { $f.url.web }))
                     $key = if ($f.md5) { $f.md5.ToLowerInvariant() } else { "$file|$($f.file_size)" }
                     if ($plan.Contains($key)) {
                         $plan[$key].Bundles += $order.product.human_name
+                        if ("$($sub.available_until)" -gt "$($plan[$key].AvailableUntil)") { $plan[$key].AvailableUntil = $sub.available_until }  # ISO dates
                         continue
                     }
                     $action = 'download'
@@ -61,6 +63,10 @@ function Get-DownloadPlan {
                         Md5     = $f.md5
                         Bytes   = [long]$f.file_size
                         Url     = $f.url.web
+                        # From ConvertFrom-PurchasePage: where to sign the link, and Humble's deadline
+                        PurchaseId     = $order.purchase_id
+                        EntitlementId  = $sub.entitlement_id
+                        AvailableUntil = $sub.available_until
                     }
                 }
             }
@@ -322,4 +328,59 @@ function ConvertFrom-LibraryPage {
     }
 }
 
-Export-ModuleMember -Function Get-PagePayload, ConvertFrom-LibraryPage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+# A date from a payload as an ISO 8601 UTC string. PowerShell 7 reads ISO strings in JSON as dates.
+function ConvertTo-IsoDate($Value) {
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+    if ($Value) { [string]$Value }
+}
+
+# A purchase page (/home/library/<id>) as an order of the old site's shape, so Get-DownloadPlan and the
+# rest work unchanged: product.human_name, subproducts[] (one per book) with machine_name, human_name and
+# downloads[].download_struct[] (name, file_size, md5, url.web, which is now a bare file name). Added:
+# purchase_id, and per book entitlement_id (to sign its links) and available_until (when Humble stops
+# offering it). Nothing when the page holds no purchase.
+function ConvertFrom-PurchasePage {
+    [CmdletBinding()]
+    param([string]$Html)
+    $payload = Get-PagePayload -Html $Html
+    if (-not $payload) { return }
+    $page = Find-PayloadObject $payload { param($o) $o.Contains('userLibraryItem') -and $o.Contains('productEntitlementId') } |
+        Select-Object -First 1
+    if (-not $page) { return }
+    $item = $page.userLibraryItem
+    [pscustomobject]@{
+        purchase_id = $page.productEntitlementId
+        product     = [pscustomobject]@{ human_name = $item.title }
+        subproducts = @(foreach ($book in @($item.entitlements.downloads)) {
+            if (-not $book) { continue }
+            $downloads = @(foreach ($dl in @($book.downloads)) {
+                if (-not $dl) { continue }
+                # The key is "<machine name>_<platform>"; the machine name is the item in manifest.csv.
+                $machine = if ($dl.key) { $dl.key -replace "_$([regex]::Escape([string]$dl.platform))$", '' }
+                [pscustomobject]@{
+                    platform        = $dl.platform
+                    machine_name    = $machine
+                    download_struct = @(foreach ($f in @($dl.downloadStruct)) {
+                        if (-not $f) { continue }
+                        [pscustomobject]@{
+                            name = $f.name; file_size = $f.fileSize; md5 = $f.md5; sha1 = $f.sha1
+                            url  = [pscustomobject]@{ web = $f.url.web }
+                        }
+                    })
+                }
+            })
+            $machine = @($downloads.machine_name | Where-Object { $_ })[0]
+            if (-not $machine) { $machine = ([string]$book.title).ToLowerInvariant() -replace '[^a-z0-9]', '' }
+            [pscustomobject]@{
+                machine_name      = $machine
+                human_name        = $book.title
+                entitlement_id    = $book.id
+                available_until   = ConvertTo-IsoDate $book.unavailableAfter
+                downloads         = $downloads
+            }
+        })
+    }
+}
+
+Export-ModuleMember -Function Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan

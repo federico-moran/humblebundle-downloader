@@ -43,6 +43,17 @@ Describe 'Get-DownloadPlan' {
         $plan[0].Url | Should -Be 'https://dl.example.test/linuxcommandline.pdf?gamekey=FAKE&ttl=1&t=sig'
     }
 
+    It 'takes the file name from a bare file name in place of a link (the site rebuilt in 2026-11)' {
+        $file = New-File 'PDF' 'unused.pdf' 'abc123'
+        $file.url = [pscustomobject]@{ web = 'linuxcommandline.pdf' }
+        $order = New-Order 'Linux Bundle' @(New-Subproduct 'The Linux Command Line' @($file))
+
+        $plan = @(Get-DownloadPlan -Orders $order)
+
+        $plan[0].File | Should -Be 'linuxcommandline.pdf'
+        $plan[0].Url | Should -Be 'linuxcommandline.pdf'
+    }
+
     It 'plans PDF and EPUB but not MOBI by default' {
         $order = New-Order 'Bundle' @(New-Subproduct 'Book' @(
             New-File 'PDF' 'book.pdf' 'm1'
