@@ -328,6 +328,46 @@ function ConvertFrom-LibraryPage {
     }
 }
 
+# The ID of a Next.js server action, found by its name in the site's public JS chunks, which declare each
+# one as createServerReference("<hex id>", ..., "<name>"). The ID changes whenever Humble redeploys.
+function Find-ServerActionId {
+    [CmdletBinding()]
+    param([string[]]$Script, [string]$Name)
+    foreach ($s in $Script) {
+        foreach ($m in [regex]::Matches("$s", 'createServerReference\)?\(\s*"([0-9a-f]{40,})"\s*,[^"]*"([\w$]+)"\s*\)')) {
+            if ($m.Groups[2].Value -ceq $Name) { return $m.Groups[1].Value }
+        }
+    }
+}
+
+# The reply to getSignedUrlsForEntitlements: Urls (file name -> signed link, torrents left out) and
+# ExpiresAt (UTC). Throws when Humble signed nothing; the message never repeats the reply.
+function ConvertFrom-SignedUrlReply {
+    [CmdletBinding()]
+    param([string]$Text)
+    $result = Find-PayloadObject $Text { param($o) $o.Contains('ok') } | Select-Object -First 1
+    if (-not $result) { throw 'Humble''s answer was not the reply of the download action getSignedUrlsForEntitlements.' }
+    if ($result.ok -ne $true) {
+        $why = if ($result.error -is [string]) { ': ' + ($result.error -replace '<[^>]*>', '').Substring(0, [Math]::Min(200, $result.error.Length)) }
+        throw "Humble did not sign the download links$why"
+    }
+    $urls = @{}
+    $collect = {
+        param($node)
+        foreach ($k in @($node.Keys)) {
+            $v = $node[$k]
+            if ($v -is [Collections.IDictionary]) { & $collect $v }  # grouped by machine name, then download key
+            elseif ($v -is [string] -and $v -match '^https://' -and $k -notlike '*.torrent') { $urls[$k] = $v }
+        }
+    }
+    if ($result.data.signedUrls -is [Collections.IDictionary]) { & $collect $result.data.signedUrls }
+    if (-not $urls.Count) { throw 'Humble signed no links for this book.' }
+    $expires = $result.data.expiresAt
+    if ($expires -is [datetime]) { $expires = $expires.ToUniversalTime() }
+    elseif ($expires) { $expires = [datetime]::Parse($expires, [cultureinfo]::InvariantCulture, 'AdjustToUniversal') }
+    [pscustomobject]@{ Urls = $urls; ExpiresAt = $expires }
+}
+
 # A date from a payload as an ISO 8601 UTC string. PowerShell 7 reads ISO strings in JSON as dates.
 function ConvertTo-IsoDate($Value) {
     if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
@@ -383,4 +423,4 @@ function ConvertFrom-PurchasePage {
     }
 }
 
-Export-ModuleMember -Function Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+Export-ModuleMember -Function Find-ServerActionId, ConvertFrom-SignedUrlReply, Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
