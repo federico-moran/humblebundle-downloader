@@ -273,4 +273,53 @@ function Get-CalibrePlan {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+# ---- Reading Humble's pages (the site rebuilt in 2026-11) ---------------------------------------------
+# Humble's pages are Next.js: their data is a React Server Components payload, sent as JavaScript string
+# chunks, self.__next_f.push([1,"..."]). This joins and decodes them; nothing when the page has none.
+function Get-PagePayload {
+    [CmdletBinding()]
+    param([string]$Html)
+    $chunks = [regex]::Matches($Html, 'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
+    if (-not $chunks.Count) { return }
+    # Each chunk is a JSON string literal.
+    -join ($chunks | ForEach-Object { ConvertFrom-Json $_.Groups[1].Value })
+}
+
+# The objects in a page's payload for which $Where is true, wherever they sit in it. The payload is rows of
+# "<hex id>:<value>"; only rows holding a JSON object or array are read (others are text or references).
+function Find-PayloadObject([string]$Payload, [scriptblock]$Where) {
+    $found = New-Object Collections.Generic.List[object]
+    $visit = {
+        param($node)
+        if ($node -is [Collections.IDictionary]) {
+            if (& $Where $node) { $found.Add($node) }
+            foreach ($v in @($node.Values)) { & $visit $v }
+        } elseif ($node -is [Collections.IList]) {
+            foreach ($v in $node) { & $visit $v }
+        }
+    }
+    foreach ($line in $Payload -split "`n") {
+        if ($line.TrimEnd("`r") -notmatch '^[0-9a-f]+:([\[{].*)$') { continue }
+        try { $value = ConvertFrom-Json $Matches[1] -AsHashtable -Depth 1024 } catch { continue }  # text that only looks like JSON
+        & $visit $value
+    }
+    $found
+}
+
+# The purchases on the library page (/home/library), each once: Id and Path of its page, and Title.
+function ConvertFrom-LibraryPage {
+    [CmdletBinding()]
+    param([string]$Html)
+    $payload = Get-PagePayload -Html $Html
+    if (-not $payload) { return }
+    $seen = @{}
+    foreach ($item in Find-PayloadObject $payload { param($o) $o.itemType -eq 'content-entitlement' -and $o.id -and $o.title }) {
+        # The page's link names the purchase's own ID, which can differ from the item's.
+        $path = if ($item.href -match '^/home/library/[^/?#]+') { $Matches[0] } else { "/home/library/$($item.id)" }
+        if ($seen[$path]) { continue }
+        $seen[$path] = $true
+        [pscustomobject]@{ Id = $path.Split('/')[-1]; Title = $item.title; Path = $path }
+    }
+}
+
+Export-ModuleMember -Function Get-PagePayload, ConvertFrom-LibraryPage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
