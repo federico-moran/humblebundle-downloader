@@ -16,7 +16,7 @@ A PowerShell 7 script using your own logged-in session. It's a sibling of [packt
 - Keeps `manifest.csv` in the folder: every file with its title, bundles, size, MD5 and status. Re-runs skip what's there.
 - A book in several bundles is downloaded once. Two different files with the same name are both kept (the second gets part of its MD5 in its name).
 - A new version of a book you have is reported; `-Update` downloads it and keeps the old copy, renamed with the date. Files Humble stops offering are kept and marked `removed`. If that would be more than 10 files, or every file of a bundle, none is marked: Humble may still be moving old orders to its new site. Run again later, or add `-AcceptRemovals`.
-- Since November 2026, Humble offers each purchase's downloads for a year (`available_until` in `manifest.csv`). At the end of a run, books you haven't downloaded that are due within 60 days are listed.
+- Purchases made since the November 2026 rebuild come with a download deadline, a year after purchase (`available_until` in `manifest.csv`); older purchases have none, as of 2026-11. At the end of a run, books you haven't downloaded that are due within 60 days are listed.
 
 ## Setup
 

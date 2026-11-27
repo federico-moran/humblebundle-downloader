@@ -46,7 +46,7 @@ At the end it lists files that failed (run again to retry), files checked by siz
 
 **Removal limit.** If more than 10 files, or every file of a bundle, are no longer offered, none is marked `removed`; they're listed instead. Humble may still be moving old orders to its new site (it said so in November 2026), so run again later. If you're sure they're gone, run with `-AcceptRemovals`.
 
-**Deadlines.** Since November 2026 Humble offers each purchase's downloads for a year after purchase (`available_until` in `manifest.csv`). The run ends by listing books you haven't downloaded that are due within 60 days, or already past: download those first.
+**Deadlines.** Purchases made since November 2026 can be downloaded for a year after purchase (`available_until` in `manifest.csv`); older purchases have no deadline, so their column stays empty. The run ends by listing books you haven't downloaded that are due within 60 days, or already past: download those first.
 
 ## 5. Verify
 
