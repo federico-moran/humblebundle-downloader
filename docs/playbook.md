@@ -7,8 +7,10 @@ For how the run on my own library went, problems included, see the [run log](run
 ## 1. Get your session cookie
 
 1. Log in at <https://www.humblebundle.com>.
-2. **F12** → **Application** → **Cookies** → `https://www.humblebundle.com` → copy the value of `_simpleauth_sess`.
+2. **F12** → **Application** → **Cookies** → `https://www.humblebundle.com` → find the cookie whose name starts with `ory_session_`. You'll need its **name** and its **value**.
 3. Keep the browser tab; you don't need it open during the run.
+
+The cookie changed when Humble rebuilt its site in November 2026; the old `_simpleauth_sess` no longer works, and the script asks for the new one.
 
 ## 2. Preview
 
@@ -18,7 +20,9 @@ In a PowerShell 7 terminal in the repo folder:
 .\Get-HumbleLibrary.ps1 -WhatIf
 ```
 
-Paste the cookie when asked. It reads every order (about one a second), saves `humble-library.json` in `OneDrive\Documents\HumbleBundle`, and prints the plan: how many files, and the total size. Check there's enough disk space, and that OneDrive won't fill up.
+When asked, type the cookie's name, then paste its value (it isn't shown). It reads every purchase page (about one a second), saves `humble-library.json` in `OneDrive\Documents\HumbleBundle`, and prints the plan: how many files, and the total size. Check there's enough disk space, and that OneDrive won't fill up.
+
+If it says Humble's site has changed, or names a page it couldn't read, Humble has changed its pages again: see [design.md](design.md#how-it-talks-to-humble).
 
 If it says Humble refused the request (403), Humble has started blocking scripts: see [design.md](design.md#fallback-a-browser-console-script).
 
@@ -39,6 +43,10 @@ It downloads the smallest file. Check that it opens, and that `manifest.csv` has
 Leave the terminal open. To stop, press **Ctrl+C**; run the same command again to carry on (an unfinished `.part` file resumes). If the cookie expires during the run, you're asked for a new one.
 
 At the end it lists files that failed (run again to retry), files checked by size only (Humble gave no MD5), books with a new version, and files Humble no longer offers. A file your antivirus blocks fails on every run: that's the antivirus, not Humble, so running again won't help.
+
+**Removal limit.** If more than 10 files, or every file of a bundle, are no longer offered, none is marked `removed`; they're listed instead. Humble may still be moving old orders to its new site (it said so in November 2026), so run again later. If you're sure they're gone, run with `-AcceptRemovals`.
+
+**Deadlines.** Since November 2026 Humble offers each purchase's downloads for a year after purchase (`available_until` in `manifest.csv`). The run ends by listing books you haven't downloaded that are due within 60 days, or already past: download those first.
 
 ## 5. Verify
 
