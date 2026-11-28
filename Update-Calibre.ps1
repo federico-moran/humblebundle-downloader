@@ -1,3 +1,4 @@
+#Requires -Version 7
 <#
 .SYNOPSIS
     Adds the library's EPUBs to Calibre, tagged "Humble Bundle" and with the bundles each came in.

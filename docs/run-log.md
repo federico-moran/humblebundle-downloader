@@ -20,3 +20,9 @@ Compared with the PacktPub library: **no book is in both.** `-CompareWith` repor
 ## 2026-10-11: `-CompareWith` matches by ISBN
 
 `-CompareWith` now matches by MD5, then by ISBN (read from the EPUBs on both sides), then by exact title, reported as `same-title` to check by hand. The "one title contains the other" rule behind the 91 wrong matches above is gone.
+
+## 2026-11: Humble rebuilt its site; the tool was rewritten for it
+
+I bought a new bundle and `-WhatIf` failed on the first call: the order API (`/api/v1/user/order`) answered 404 with an HTML page, for everyone. Humble had rebuilt its site on Next.js, with a new login (an `ory_session_` cookie) and no JSON API for the library. Recorded in issue #1.
+
+Probed by hand with a browser and a small script: the library and purchase pages carry their data inside the HTML, and download links come from a "server action" the page's download button calls. The tool now reads those pages, adapts them to the old order shape (so the plan, the checks, the manifest and Calibre are unchanged), and signs each book's links just before downloading it. New on Humble's side: new purchases can be downloaded for a year (older ones have no deadline), so the manifest records `available_until`. Since a banner said older orders were still being moved over, a run no longer marks many files `removed` at once. Specified in issue #2; how it works is in [design.md](design.md#how-it-talks-to-humble).

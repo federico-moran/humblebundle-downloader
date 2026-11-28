@@ -32,10 +32,12 @@ function Get-DownloadPlan {
                     if ($f.md5) { $offered[$f.md5.ToLowerInvariant()] = $true }
                     $offered["$($sub.machine_name)|$fmt"] = $true
                     if ($dl.platform -notin $Platform -or $fmt -notin $Format -or -not $f.url.web) { continue }  # no link: hosted elsewhere
-                    $file = [IO.Path]::GetFileName(([uri]$f.url.web).AbsolutePath)
+                    $link = [uri]::new($f.url.web, [UriKind]::RelativeOrAbsolute)  # since 2026-11, a bare file name
+                    $file = [IO.Path]::GetFileName($(if ($link.IsAbsoluteUri) { $link.AbsolutePath } else { $f.url.web }))
                     $key = if ($f.md5) { $f.md5.ToLowerInvariant() } else { "$file|$($f.file_size)" }
                     if ($plan.Contains($key)) {
                         $plan[$key].Bundles += $order.product.human_name
+                        if ("$($sub.available_until)" -gt "$($plan[$key].AvailableUntil)") { $plan[$key].AvailableUntil = $sub.available_until }  # ISO dates
                         continue
                     }
                     $action = 'download'
@@ -61,6 +63,10 @@ function Get-DownloadPlan {
                         Md5     = $f.md5
                         Bytes   = [long]$f.file_size
                         Url     = $f.url.web
+                        # From ConvertFrom-PurchasePage: where to sign the link, and Humble's deadline
+                        PurchaseId     = $order.purchase_id
+                        EntitlementId  = $sub.entitlement_id
+                        AvailableUntil = $sub.available_until
                     }
                 }
             }
@@ -273,4 +279,200 @@ function Get-CalibrePlan {
     }
 }
 
-Export-ModuleMember -Function Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
+# ---- Reading Humble's pages (the site rebuilt in 2026-11) ---------------------------------------------
+# Humble's pages are Next.js: their data is a React Server Components payload, sent as JavaScript string
+# chunks, self.__next_f.push([1,"..."]). This joins and decodes them; nothing when the page has none.
+function Get-PagePayload {
+    [CmdletBinding()]
+    param([string]$Html)
+    $chunks = [regex]::Matches($Html, 'self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)')
+    if (-not $chunks.Count) { return }
+    # Each chunk is a JSON string literal.
+    -join ($chunks | ForEach-Object { ConvertFrom-Json $_.Groups[1].Value })
+}
+
+# The objects in a page's payload for which $Where is true, wherever they sit in it. The payload is rows of
+# "<hex id>:<value>"; only rows holding a JSON object or array are read (others are text or references).
+function Find-PayloadObject([string]$Payload, [scriptblock]$Where) {
+    $found = New-Object Collections.Generic.List[object]
+    $visit = {
+        param($node)
+        if ($node -is [Collections.IDictionary]) {
+            if (& $Where $node) { $found.Add($node) }
+            foreach ($v in @($node.Values)) { & $visit $v }
+        } elseif ($node -is [Collections.IList]) {
+            foreach ($v in $node) { & $visit $v }
+        }
+    }
+    foreach ($line in $Payload -split "`n") {
+        if ($line.TrimEnd("`r") -notmatch '^[0-9a-f]+:([\[{].*)$') { continue }
+        try { $value = ConvertFrom-Json $Matches[1] -AsHashtable -Depth 1024 } catch { continue }  # text that only looks like JSON
+        & $visit $value
+    }
+    $found
+}
+
+# The purchases on the library page (/home/library), each once: Id and Path of its page, and Title.
+function ConvertFrom-LibraryPage {
+    [CmdletBinding()]
+    param([string]$Html)
+    $payload = Get-PagePayload -Html $Html
+    if (-not $payload) { return }
+    $seen = @{}
+    foreach ($item in Find-PayloadObject $payload { param($o) $o.itemType -eq 'content-entitlement' -and $o.id -and $o.title }) {
+        # The page's link names the purchase's own ID, which can differ from the item's.
+        $path = if ($item.href -match '^/home/library/[^/?#]+') { $Matches[0] } else { "/home/library/$($item.id)" }
+        if ($seen[$path]) { continue }
+        $seen[$path] = $true
+        [pscustomobject]@{ Id = $path.Split('/')[-1]; Title = $item.title; Path = $path }
+    }
+}
+
+# The ID of a Next.js server action, found by its name in the site's public JS chunks, which declare each
+# one as createServerReference("<hex id>", ..., "<name>"). The ID changes whenever Humble redeploys.
+function Find-ServerActionId {
+    [CmdletBinding()]
+    param([string[]]$Script, [string]$Name)
+    foreach ($s in $Script) {
+        foreach ($m in [regex]::Matches("$s", 'createServerReference\)?\(\s*"([0-9a-f]{40,})"\s*,[^"]*"([\w$]+)"\s*\)')) {
+            if ($m.Groups[2].Value -ceq $Name) { return $m.Groups[1].Value }
+        }
+    }
+}
+
+# The reply to getSignedUrlsForEntitlements: Urls (file name -> signed link, torrents left out) and
+# ExpiresAt (UTC). Throws when Humble signed nothing; the message never repeats the reply.
+function ConvertFrom-SignedUrlReply {
+    [CmdletBinding()]
+    param([string]$Text)
+    $result = Find-PayloadObject $Text { param($o) $o.Contains('ok') } | Select-Object -First 1
+    if (-not $result) { throw 'Humble''s answer was not the reply of the download action getSignedUrlsForEntitlements.' }
+    if ($result.ok -ne $true) {
+        $why = if ($result.error -is [string]) { ': ' + ($result.error -replace '<[^>]*>', '').Substring(0, [Math]::Min(200, $result.error.Length)) }
+        throw "Humble did not sign the download links$why"
+    }
+    $urls = @{}
+    $collect = {
+        param($node)
+        foreach ($k in @($node.Keys)) {
+            $v = $node[$k]
+            if ($v -is [Collections.IDictionary]) { & $collect $v }  # grouped by machine name, then download key
+            elseif ($v -is [string] -and $v -match '^https://' -and $k -notlike '*.torrent') { $urls[$k] = $v }
+        }
+    }
+    if ($result.data.signedUrls -is [Collections.IDictionary]) { & $collect $result.data.signedUrls }
+    if (-not $urls.Count) { throw 'Humble signed no links for this book.' }
+    $expires = $result.data.expiresAt
+    if ($expires -is [datetime]) { $expires = $expires.ToUniversalTime() }
+    elseif ($expires) { $expires = [datetime]::Parse($expires, [cultureinfo]::InvariantCulture, 'AdjustToUniversal') }
+    [pscustomobject]@{ Urls = $urls; ExpiresAt = $expires }
+}
+
+# Books with a file not yet downloaded that Humble stops offering within $Days days, or already stopped
+# (Humble's unavailableAfter, a year after purchase): one row per book, soonest first.
+function Get-DownloadDeadline {
+    [CmdletBinding()]
+    param(
+        [object[]]$Plan,
+        [object[]]$Manifest = @(),  # manifest.csv as it is now, including this run's downloads
+        [datetime]$Now = [datetime]::UtcNow,
+        [int]$Days = 60
+    )
+    $present = @{}
+    foreach ($row in $Manifest) { if ($row.status -eq 'present') { $present[$row.file] = $true } }
+    $Plan | Where-Object { $_.AvailableUntil -and $_.Action -notin 'skip', 'removed' -and -not $present[$_.File] } |
+        Group-Object Item | ForEach-Object {
+            $p = $_.Group[0]
+            $until = [datetime]::Parse($p.AvailableUntil, [cultureinfo]::InvariantCulture, 'AdjustToUniversal')
+            $left = [int][Math]::Truncate(($until - $Now.ToUniversalTime()).TotalDays)
+            if ($left -le $Days) {
+                [pscustomobject]@{ Item = $p.Item; Title = $p.Title; AvailableUntil = $p.AvailableUntil; DaysLeft = $left }
+            }
+        } | Sort-Object AvailableUntil
+}
+
+# Which of the plan's removals to record in the manifest. More than $Limit, or every downloaded file of a
+# bundle, looks like Humble still migrating old orders rather than withdrawing books: then none is recorded
+# (all are HeldBack), unless -AcceptRemovals.
+function Get-RemovalDecision {
+    [CmdletBinding()]
+    param(
+        [object[]]$Plan,
+        [object[]]$Manifest,
+        [switch]$AcceptRemovals,
+        [int]$Limit = 10
+    )
+    $removed = @($Plan | Where-Object Action -eq 'removed')
+    $gone = @{}
+    foreach ($r in $removed) { $gone[$r.File] = $true }
+    $wholeBundle = $false
+    if ($removed.Count -and $removed.Count -le $Limit) {
+        $files = @{}  # bundle -> its downloaded files
+        foreach ($row in $Manifest | Where-Object status -eq 'present') {
+            foreach ($b in "$($row.bundles)" -split '; ' | Where-Object { $_ }) { $files[$b] = @($files[$b]) + $row.file | Where-Object { $_ } }
+        }
+        $wholeBundle = [bool]($files.Values | Where-Object { @($_ | Where-Object { -not $gone[$_] }).Count -eq 0 })
+    }
+    if ($AcceptRemovals -or ($removed.Count -le $Limit -and -not $wholeBundle)) {
+        [pscustomobject]@{ Record = $removed; HeldBack = @() }
+    } else {
+        [pscustomobject]@{ Record = @(); HeldBack = $removed }
+    }
+}
+
+# A date from a payload as an ISO 8601 UTC string. PowerShell 7 reads ISO strings in JSON as dates.
+function ConvertTo-IsoDate($Value) {
+    if ($Value -is [datetime]) { return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+    if ($Value -is [datetimeoffset]) { return $Value.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+    if ($Value) { [string]$Value }
+}
+
+# A purchase page (/home/library/<id>) as an order of the old site's shape, so Get-DownloadPlan and the
+# rest work unchanged: product.human_name, subproducts[] (one per book) with machine_name, human_name and
+# downloads[].download_struct[] (name, file_size, md5, url.web, which is now a bare file name). Added:
+# purchase_id, and per book entitlement_id (to sign its links) and available_until (when Humble stops
+# offering it). Nothing when the page holds no purchase.
+function ConvertFrom-PurchasePage {
+    [CmdletBinding()]
+    param([string]$Html)
+    $payload = Get-PagePayload -Html $Html
+    if (-not $payload) { return }
+    $page = Find-PayloadObject $payload { param($o) $o.Contains('userLibraryItem') -and $o.Contains('productEntitlementId') } |
+        Select-Object -First 1
+    if (-not $page) { return }
+    $item = $page.userLibraryItem
+    [pscustomobject]@{
+        purchase_id = $page.productEntitlementId
+        product     = [pscustomobject]@{ human_name = $item.title }
+        subproducts = @(foreach ($book in @($item.entitlements.downloads)) {
+            if (-not $book) { continue }
+            $downloads = @(foreach ($dl in @($book.downloads)) {
+                if (-not $dl) { continue }
+                # The key is "<machine name>_<platform>"; the machine name is the item in manifest.csv.
+                $machine = if ($dl.key) { $dl.key -replace "_$([regex]::Escape([string]$dl.platform))$", '' }
+                [pscustomobject]@{
+                    platform        = $dl.platform
+                    machine_name    = $machine
+                    download_struct = @(foreach ($f in @($dl.downloadStruct)) {
+                        if (-not $f) { continue }
+                        [pscustomobject]@{
+                            name = $f.name; file_size = $f.fileSize; md5 = $f.md5; sha1 = $f.sha1
+                            url  = [pscustomobject]@{ web = $f.url.web }
+                        }
+                    })
+                }
+            })
+            $machine = @($downloads.machine_name | Where-Object { $_ })[0]
+            if (-not $machine) { $machine = ([string]$book.title).ToLowerInvariant() -replace '[^a-z0-9]', '' }
+            [pscustomobject]@{
+                machine_name      = $machine
+                human_name        = $book.title
+                entitlement_id    = $book.id
+                available_until   = ConvertTo-IsoDate $book.unavailableAfter
+                downloads         = $downloads
+            }
+        })
+    }
+}
+
+Export-ModuleMember -Function Get-DownloadDeadline, Get-RemovalDecision, Find-ServerActionId, ConvertFrom-SignedUrlReply, Get-PagePayload, ConvertFrom-LibraryPage, ConvertFrom-PurchasePage, Get-DownloadPlan, Test-DownloadedFile, Get-BookFileType, Test-Library, Get-EpubIsbn, Compare-Library, ConvertTo-CalibreTag, Get-CalibrePlan
